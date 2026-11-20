@@ -1,6 +1,6 @@
 # 重生之我用系统搓游戏
 
-Forked from [lorenchilll961-debug/petalwake](https://github.com/lorenchilll961-debug/petalwake), MIT licensed. Rebuilt as an independent project.
+Qoder 高校创造力大赛作品
 
 ---
 
