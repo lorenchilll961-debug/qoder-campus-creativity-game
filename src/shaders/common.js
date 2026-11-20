@@ -115,8 +115,26 @@ vec3 terrainN(vec2 xz, float lod){
 }
 `;
 
+export const SEASON = /* glsl */`
+uniform vec3 uSeasonGrass;
+uniform vec3 uSeasonLeaves;
+uniform float uSeasonBloom;
+uniform float uSeasonSnow;
+float seasonSnowAt(vec3 p, float up){
+  return uSeasonSnow * smoothstep(0.35, 0.8, up) * smoothstep(1.8, 5.0, p.y)
+    * (0.72 + 0.28 * vnoise(p.xz * 0.045));
+}
+`;
+
 /** The meadow palette: shared by the terrain, the grass blades and the far-field flower tint. */
 export const MEADOW = /* glsl */`
+${SEASON}
+uniform float uSeasonPastel;
+vec3 seasonPetal(vec3 color){
+  float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 pastel = mix(vec3(0.98, 0.46, 0.67), vec3(1.0, 0.96, 0.93), lightness);
+  return mix(color, pastel, uSeasonPastel);
+}
 // Slow colour drift across the island: emerald hollows, sun-bleached crests.
 vec3 meadowTint(vec2 xz, float wet){
   float a = vnoise(xz * 0.0031 + 11.0);
@@ -128,7 +146,7 @@ vec3 meadowTint(vec2 xz, float wet){
   vec3 col = mix(lush, fresh, smoothstep(0.22, 0.78, a * 0.6 + b * 0.4));
   col = mix(col, dry, smoothstep(0.38, 0.80, b * 0.5 + c * 0.5) * (1.0 - wet) * 0.85);
   col = mix(col, lush * 0.92, wet * 0.65);
-  return col;
+  return col * uSeasonGrass;
 }
 
 // Flower species palette. s = species field (0..1), r = per-flower random.
@@ -153,7 +171,7 @@ vec3 flowerPetal(float s, float r){
   } else {
     c = r < 0.66 ? red : (r < 0.84 ? orange : (r < 0.93 ? pinkA : white));
   }
-  return c;
+  return seasonPetal(c);
 }
 // species silhouette: x = petal count, y = eye size, z = head size, w = stem height
 vec4 flowerShape(float s){
@@ -174,7 +192,7 @@ vec3 flowerMean(float s){
   c = mix(c, lav, smoothstep(SP2 - 0.03, SP2 + 0.03, s));
   c = mix(c, gold, smoothstep(SP3 - 0.03, SP3 + 0.03, s));
   c = mix(c, poppy, smoothstep(SP4 - 0.03, SP4 + 0.03, s));
-  return c;
+  return seasonPetal(c);
 }
 `;
 

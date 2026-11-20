@@ -9,7 +9,8 @@ import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, MEADOW, WIN
 import { SKY_UNIFORMS } from './sky.js';
 
 const SHARED = [...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uWorld', 'uNoiseTex', 'uWakeTex', 'uWake', 'uWind', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uRider', 'uStripTex',
-  'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1'];
+  'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
+  'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonPastel'];
 
 // ----------------------------------------------------------------------------------------
 // shell definitions. fade = [in0, in1, out0, out1] (metres from camera)
@@ -198,7 +199,8 @@ void main(){
   vNormal = n;
   vInfo = vec4(t, rnd.w, gust, light.r);
   // on cliff ledges the sward is short, wind-burnt and darker (matches the far-field ground)
-  vTint = mix(meadowTint(xz, wet), vec3(0.135, 0.170, 0.060), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
+  vTint = mix(meadowTint(xz, wet), vec3(0.135, 0.170, 0.060) * uSeasonGrass, smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
+  vTint = mix(vTint, vec3(0.45, 0.51, 0.57), seasonSnowAt(root, 1.0) * smoothstep(0.0, 0.8, t));
   vAux = vec2(light.g, min(wk.z, 1.0));
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }
@@ -297,7 +299,7 @@ void main(){
   float want = min(uField.x * pow(dn, -1.5) / uShell.x, 1.0);
   float share = smoothstep(uShell.y, uShell.z, d) * (1.0 - smoothstep(uShell.w * 0.85, uShell.w, d));
   float thr = want * share;
-  float fade = smoothstep(0.0, 0.3 * thr + 1e-5, thr - rank) * keep;
+  float fade = smoothstep(0.0, 0.3 * thr + 1e-5, thr - rank) * keep * sqrt(uSeasonBloom);
   // most candidates do not bloom at any one moment: skip the rest of the work for those
   if (fade <= 0.0){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   // those that remain grow with distance, so the cover - and the colour - holds

@@ -114,12 +114,17 @@ export class WindFX {
 
   // ------------------------------------------------------------------ emitters
   _petal(x, y, z, vx, vy, vz, species, lit, life = rand(3.5, 6.5)) {
-    const c = petalColor(clamp(species + rand(-0.05, 0.05), 0, 1), Math.random());
+    const color = petalColor(clamp(species + rand(-0.05, 0.05), 0, 1), Math.random());
+    const lightness = color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
+    const pastel = [0.98 + 0.02 * lightness, 0.46 + 0.50 * lightness, 0.67 + 0.26 * lightness];
+    const c = color.map((value, i) => value + (pastel[i] - value) * U.uSeasonPastel.value);
     const v = rand(0.86, 1.1);
     this.flakes.spawn(x, y, z, vx, vy, vz, KIND.PETAL, rand(0.10, 0.19), c[0] * v, c[1] * v, c[2] * v, life, lit, rand(0.62, 0.86));
   }
   _leaf(x, y, z, vx, vy, vz, lit, straw) {
     const g = straw ? [0.52, 0.47, 0.20] : [0.20, 0.36, 0.08];
+    const tint = U.uSeasonGrass.value;
+    g[0] *= tint.x; g[1] *= tint.y; g[2] *= tint.z;
     const v = rand(0.75, 1.25);
     this.flakes.spawn(x, y, z, vx, vy, vz, KIND.LEAF, rand(0.09, 0.2), g[0] * v, g[1] * v, g[2] * v, rand(2.2, 4.5), lit, rand(0.16, 0.34));
   }
@@ -191,11 +196,11 @@ export class WindFX {
           const dens = sp[0];
           // (at a sprint they are left far behind the camera within a second or two: no need to
           // keep simulating them as long)
-          if (s === SURF.FLOWERS && Math.random() < (0.25 + dens * 0.75) * Math.min(1, take * 2.0)) this._petal(x, gy + rand(0.45, 0.95), z, vx, vy, vz, sp[1], lit, rand(3.5, 6.5) / (1 + 0.35 * Math.max(speedK - 1, 0)));
+          if (s === SURF.FLOWERS && Math.random() < (0.25 + dens * 0.75) * Math.min(1, take * 2.0) * U.uSeasonBloom.value) this._petal(x, gy + rand(0.45, 0.95), z, vx, vy, vz, sp[1], lit, rand(3.5, 6.5) / (1 + 0.35 * Math.max(speedK - 1, 0)));
           else if (Math.random() < 0.2) this._leaf(x, gy + rand(0.2, 0.55), z, vx, vy, vz, lit, Math.random() < 0.3);
         }
         // pollen and seed fluff glinting in the air
-        n = this._count(1, 26 * k, dt);
+        n = this._count(1, 26 * k * U.uSeasonBloom.value, dt);
         for (let i = 0; i < n; i++) {
           const [x, z] = pick(2.2, 4);
           const gy = T.heightAt(x, z);
@@ -336,7 +341,7 @@ export class WindFX {
         if (s === SURF.FLOWERS || s === SURF.GRASS) {
           const gy = T.heightAt(x, z);
           const take = this.strip ? Math.max(0, this.strip.stationAmount(r, x, z) - this.strip.at(x, z)) : 0.5;
-          if (s === SURF.FLOWERS && Math.random() < (0.3 + sp[0] * 0.7) * Math.min(1, take * 2.0)) this._petal(x, gy + rand(0.45, 0.95), z, ox, rand(0.4, 2.2), oz, sp[1], lit);
+          if (s === SURF.FLOWERS && Math.random() < (0.3 + sp[0] * 0.7) * Math.min(1, take * 2.0) * U.uSeasonBloom.value) this._petal(x, gy + rand(0.45, 0.95), z, ox, rand(0.4, 2.2), oz, sp[1], lit);
           else if (Math.random() < 0.3) this._leaf(x, gy + rand(0.2, 0.5), z, ox, rand(0.4, 2.0), oz, lit, Math.random() < 0.3);
         } else if (s === SURF.WATER) {
           const sy = this.surfaceAt(x, z), b = rand(0.75, 1.2);
@@ -382,7 +387,7 @@ export class WindFX {
 
     // ---- ambient: petals let go on the gusts all around the camera
     {
-      const n = this._count(12, 34, dt);
+      const n = this._count(12, 34 * U.uSeasonBloom.value, dt);
       for (let i = 0; i < n; i++) {
         const a = rand(6.2831853), r = rand(4, 46);
         const x = camera.position.x + Math.cos(a) * r + f.x * 22, z = camera.position.z + Math.sin(a) * r + f.z * 22;
@@ -486,7 +491,7 @@ export class WindFX {
         continue;
       }
       const gy = T.heightAt(x, z);
-      if (s === SURF.FLOWERS && Math.random() < (0.3 + sp[0] * 0.7) * this._petalsLeft(x, z)) this._petal(x, gy + rand(0.4, 0.9), z, vx, vy, vz, sp[1], lit);
+      if (s === SURF.FLOWERS && Math.random() < (0.3 + sp[0] * 0.7) * this._petalsLeft(x, z) * U.uSeasonBloom.value) this._petal(x, gy + rand(0.4, 0.9), z, vx, vy, vz, sp[1], lit);
       else if (s === SURF.FLOWERS || s === SURF.GRASS) this._leaf(x, gy + rand(0.2, 0.5), z, vx, vy, vz, lit, Math.random() < 0.3);
       else if (i % 3 === 0) this._pebble(x, gy + 0.08, z, vx, vy * 1.5, vz, lit, s === SURF.SAND);
       else if (i % 3 === 1) this._wisp(x, gy + 0.25, z, vx, vy * 0.5, vz, sun, s === SURF.SAND);

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { shared } from '../core/ctx.js';
-import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW } from '../shaders/common.js';
+import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW, SEASON } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
 
 const CELL = 48;
@@ -33,7 +33,7 @@ export class Props {
       for (const t of [sm.map, sm.normalMap, sm.roughnessMap]) if (t) { t.anisotropy = 8; }
       const mat = new THREE.ShaderMaterial({
         uniforms: {
-          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn'),
+          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow'),
           tMap: { value: sm.map }, tNormal: { value: sm.normalMap }, tRough: { value: sm.roughnessMap || sm.map },
           uHasRough: { value: sm.roughnessMap ? 1 : 0 },
           uFoliage: { value: hasWind ? 1 : 0 },
@@ -204,6 +204,7 @@ ${ATMOSPHERE}
 ${CLOUD_SHADOW}
 ${TERRAIN_LOOKUP}
 ${SHADOW}
+${SEASON}
 void main(){
   vec3 alb = texture(tMap, vUv).rgb;
   vec3 nt = texture(tNormal, vUv).xyz * 2.0 - 1.0;
@@ -212,6 +213,8 @@ void main(){
   vec3 V = normalize(uCamPos - vWorld);
   float rough = mix(0.8, texture(tRough, vUv).g, uHasRough);
   float leaf = vInfo.y * uFoliage;
+  alb *= mix(vec3(1.0), uSeasonLeaves, leaf);
+  alb = mix(alb, vec3(0.58, 0.64, 0.70), seasonSnowAt(vWorld, N.y) * leaf);
 
   vec4 light = texture(uLightTex, worldUV(vWorld.xz));
   // the baked map holds the ground's shadows; a tall prop climbs out of a low one

@@ -16,6 +16,12 @@ export const U = {
   uAmbGround: { value: new THREE.Vector3() },
   uFog: { value: new THREE.Vector4(1.5e-4, 1 / 420, 0, 0) }, // density, falloff, -, -
 
+  uSeasonGrass: { value: new THREE.Vector3(1, 1, 1) },
+  uSeasonLeaves: { value: new THREE.Vector3(1, 1, 1) },
+  uSeasonBloom: { value: 1 },
+  uSeasonSnow: { value: 0 },
+  uSeasonPastel: { value: 0 },
+
   // terrain lookups
   uHeightTex: { value: null },
   uSplatTex: { value: null },

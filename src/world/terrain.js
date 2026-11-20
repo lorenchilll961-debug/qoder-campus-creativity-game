@@ -271,7 +271,8 @@ export class Terrain {
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         ...shared(...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uTintTex', 'uWorld', 'uNoiseTex', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uWakeTex', 'uWake', 'uStripTex',
-          'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1'),
+          'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
+          'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonPastel'),
         uGrid: { value: GRID },
         uLodRange: { value: LOD_RANGE },
         uLodAlt: { value: 0 },
@@ -510,7 +511,7 @@ void main(){
   // close up we look between the blades at shaded thatch; far away this stands in for the whole sward
   // grass clinging to steep ground and ledges is short, wind-burnt and darker
   float steepK = max(smoothstep(0.06, 0.24, slope), smoothstep(0.25, 0.8, cliffy) * 0.85);
-  tint = mix(tint, vec3(0.135, 0.170, 0.060), steepK * 0.7);
+  tint = mix(tint, vec3(0.135, 0.170, 0.060) * uSeasonGrass, steepK * 0.7);
   vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0);
   vec3 swardNear = tint * 0.62 * gDetail;
   // seen from afar the sward is tussocks, hollows and wind-combed patches, not a flat wash
@@ -525,7 +526,7 @@ void main(){
   float dapple = 0.62 + 0.62 * (ntexA(P.xz * 0.31 + 2.0).b * 0.6 + nzA.r * 0.4);
   float tintAmt = flowers * dapple * mix(0.44, mix(0.50, 0.88, glance * glance), 1.0 - nearK) * mix(0.55 + 0.9 * speck, 1.0, smoothstep(40.0, 260.0, dist));
   // where the wake has torn the petals off there is no flower colour left, only the green
-  tintAmt *= 1.0 - strippedFiltered(uv);
+  tintAmt *= (1.0 - strippedFiltered(uv)) * uSeasonBloom;
   // in a town: streets and squares are paved, and nothing flowers where people walk
   vec4 town = townMask(P.xz);
   tintAmt *= 1.0 - town.a;
@@ -660,6 +661,9 @@ void main(){
     m.h = mix(m.h, mp.h, paved);
     Nw = normalize(mix(Nw, normalize(N + vec3(mp.n.x, 0.0, mp.n.y) * 0.85), paved));
   }
+
+  float snow = seasonSnowAt(P, N.y) * (1.0 - town.a);
+  m.c = mix(m.c, vec3(0.72, 0.79, 0.84) * (0.82 + 0.18 * mg.h), snow);
 
   // ---- light
   float cs = cloudShadow(P.xz, uTime);

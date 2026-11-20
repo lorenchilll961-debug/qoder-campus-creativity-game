@@ -22,6 +22,8 @@ import { Town } from './world/town.js';
 import { Places } from './world/places.js';
 import { Sound } from './audio/audio.js';
 import { Gameplay } from './game/index.js';
+import { Seasons } from './seasons/index.js';
+import { SEASONS } from './seasons/cycle.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -80,6 +82,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 async function boot() {
   $('title').classList.add('loading');
   applyEnv('afternoon');
+  game.seasons = new Seasons($('seasonPanel'), game);
   const noise = makeNoiseTexture();
   U.uNoiseTex.value = noise.texture;
   game.noise = noise;
@@ -263,6 +266,7 @@ function autopilot() {
 const _bl = new THREE.Vector3(), _br = new THREE.Vector3();
 const _sp = [0, 0, 0, 0];
 function advance(dt, ctl) {
+  game.seasons.update(dt);
   const t = game.time;
   const { flight, rider, chase, terrain, wake, fx, vortex } = game;
   game.gameplay.update(dt, ctl);             // may take the broom over (flight.auto) to land it
@@ -327,6 +331,9 @@ function step(dt) {
     if (input.take('KeyI')) { input.invert = !input.invert; toast(input.invert ? '俯仰已反转' : '俯仰已复原'); }
     if (input.take('KeyP')) $('hud').classList.toggle('quiet');
     if (input.take('KeyM')) toast(game.sound.toggleMute() ? '声音已静' : '声音已开');
+    for (let i = 0; i < SEASONS.length; i++) {
+      if (input.take(`Digit${i + 1}`)) game.seasons.select(SEASONS[i].id);
+    }
   }
   advance(dt, game.override || (game.state === 'play' ? input : autopilot()));
   applyFov();
