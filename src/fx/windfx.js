@@ -34,8 +34,11 @@ export class WindFX {
     this.flakes = new Flakes(12000);
     this.sprites = new Sprites(depthUniform, 7000);
     this.ribbons = [new Ribbon(44, 0.7), new Ribbon(44, 0.7)];
+    // the sprint's long white contrail, laid off the same bristle tips
+    this.vapors = [new Ribbon(150, 2.6, 0.8), new Ribbon(150, 2.6, 0.8)];
     this.group = new THREE.Group();
-    this.group.add(this.flakes.mesh, this.sprites.mesh, this.ribbons[0].mesh, this.ribbons[1].mesh);
+    this.group.add(this.flakes.mesh, this.sprites.mesh, this.ribbons[0].mesh, this.ribbons[1].mesh, this.vapors[0].mesh, this.vapors[1].mesh);
+    this._vk = 0;
     this.acc = new Float32Array(32);
     this.time = 0;
     this._sp = [0, 0, 0, 0];
@@ -461,9 +464,18 @@ export class WindFX {
   sunTint(vis) { return uSun(vis); }
 
   /** Bristle trails: call after the rider's matrices are current. */
-  updateRibbons(dt, left, right, camPos, strength) {
+  updateRibbons(dt, left, right, camPos, strength, boost = 0) {
     this.ribbons[0].update(dt, left, camPos, 0.11, strength);
     this.ribbons[1].update(dt, right, camPos, 0.11, strength);
+    // the gust ribbon is let in and out gently, so a sprint ends with the trail left behind, not cut off
+    this._vk += (boost - this._vk) * (1 - Math.exp(-dt * 1.6));
+    this.vapors[0].update(dt, left, camPos, 0.16, this._vk * 1.25, 120);
+    this.vapors[1].update(dt, right, camPos, 0.16, this._vk * 1.25, 120);
+  }
+
+  resetRibbons() {
+    for (const r of [...this.ribbons, ...this.vapors]) r.reset();
+    this._vk = 0;
   }
 
   /** A dive lands: whatever is underneath is thrown outward in a ring. hit = how hard (m/s). */

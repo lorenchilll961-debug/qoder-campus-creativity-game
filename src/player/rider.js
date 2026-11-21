@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { U } from '../core/ctx.js';
+import { loadTracked } from '../core/progress.js';
 
 const SCALE = 1.28;
 const SHADOW_SIZE = 1024;
@@ -15,8 +16,9 @@ const STAND_HEIGHT = 2.05; // boots to hat tip, if the standing model does not s
 
 export class Rider {
   static async load(renderer, base = './assets/models') {
+    const loader = new GLTFLoader();
     const [gltf, info] = await Promise.all([
-      new GLTFLoader().loadAsync(`${base}/rider.glb`),
+      loadTracked(loader, `${base}/rider.glb`),
       fetch(`${base}/rider.json`).then((r) => r.json()),
     ]);
     return new Rider(renderer, gltf.scene, info);
@@ -41,6 +43,7 @@ export class Rider {
     this.seat = { hop: 0, sy: 1, flip: 0, calm: 0 };
     // dismounted: show the standing model with its feet at y (m, in the rider's frame), squashed by sy
     this.off = { on: false, y: 0, sy: 1 };
+    this.ghost = false;               // seen through her own eyes the seated model is not drawn
     this.standing = null;                // { root, model, height } once the standing model is in
     this.meshes = [];
     model.traverse((o) => {
@@ -236,6 +239,7 @@ export class Rider {
         S.uniforms.uLantern.value.set(Math.sin(time * 1.3) * 0.05, Math.sin(time * 1.1 + 0.7) * 0.04);
       }
     } else this.tilt.visible = true;
+    if (this.ghost && !o.on) this.tilt.visible = false;
 
     this.uniforms.uRiderTime.value = time;
     this.uniforms.uRiderWind.value = 0.35 + 0.65 * sk + flight.boosting * 0.6;
@@ -280,6 +284,13 @@ export class Rider {
     cam.lookAt(p);
     cam.updateMatrixWorld();
     const r = this.renderer;
+    // the shadow shows what would be seen from outside: while she flies in her own view the model
+    // is hidden on screen, so its visibility is decided here, not from the scene
+    const t = this.tilt, S = this.standing;
+    const tv = t.visible, sv = S ? S.root.visible : null;
+    const seated = !this.off.on;
+    t.visible = seated;
+    if (S) S.root.visible = !seated;
     // draw only the rider, with a depth-only material
     const parent = this.group.parent;
     this.shadowScene.add(this.group);
@@ -291,6 +302,8 @@ export class Rider {
     r.setRenderTarget(null);
     r.shadowMap.enabled = prev;
     this.shadowScene.overrideMaterial = null;
+    t.visible = tv;
+    if (S) S.root.visible = sv;
     if (parent) parent.add(this.group);
     // world -> shadow uv + standard depth (0 near .. 1 far), independent of the depth convention
     const view = cam.matrixWorldInverse;

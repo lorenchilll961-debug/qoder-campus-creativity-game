@@ -37,6 +37,10 @@ export class ChaseCamera {
     this.shake = 0;
     this.orbit = 0;         // title-screen orbit angle offset
     this.orbitPitch = 0;
+    this.fpvK = 0;          // goggles view blended in (0..1); mode 3 is hers through her own eyes
+    this._fq = new THREE.Quaternion();
+    this._fe = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._fp = new THREE.Vector3();
     this._target = new THREE.Vector3();
     this._pos = new THREE.Vector3();
     this._up = new THREE.Vector3();
@@ -62,10 +66,14 @@ export class ChaseCamera {
   snap() {
     this.yaw = this.flight.yaw;
     this.pitch = this.flight.pitch;
-    this.roll = this.flight.roll * CAM_MODES[this.mode].roll;
+    this.roll = this.flight.roll * (CAM_MODES[this.mode] || CAM_MODES[0]).roll;
   }
 
-  next() { this.mode = (this.mode + 1) % CAM_MODES.length; return CAM_MODES[this.mode].name; }
+  /** C cycles: 追随 → 贴地 → 远眺 → 护目镜 → 追随. */
+  next() {
+    this.mode = this.mode === 3 ? 0 : this.mode + 1;
+    return this.mode === 3 ? '护目镜' : CAM_MODES[this.mode].name;
+  }
 
   /**
    * Hand the view to a slow orbit about `focus` (a Vector3 that is read every frame, so it may
@@ -136,7 +144,7 @@ export class ChaseCamera {
   }
 
   update(dt, time, surfaceAt) {
-    const f = this.flight, m = CAM_MODES[this.mode], cam = this.camera;
+    const f = this.flight, m = CAM_MODES[this.mode] || CAM_MODES[0], cam = this.camera;
     this.yaw = dampAngle(this.yaw, f.yaw + this.orbit, m.lag, dt);
     this.pitch = damp(this.pitch, f.pitch * 0.86 + this.orbitPitch, m.lag * 0.9, dt);
     this.roll = damp(this.roll, f.roll * m.roll, 4.2, dt);
@@ -190,6 +198,19 @@ export class ChaseCamera {
     this._q.setFromAxisAngle(this._z, -this.roll + Math.sin(time * 29.0) * s * 0.06);
     cam.quaternion.multiply(this._q);
     this.fovOut = this.fov;
+
+    // ---- the goggles: blend the view over onto her eyes, eased over about a second
+    this.fpvK = damp(this.fpvK, this.mode === 3 ? 1 : 0, 2.4, dt);
+    if (this.fpvK > 0.001) {
+      // the same tilted frame the rider is drawn in, the eye just above the broom's handle
+      const q = this._fq.setFromEuler(this._fe.set(f.pitch, -f.yaw, -f.roll));
+      const eye = this._fp.set(0, 0.56, 0.12).applyQuaternion(q).add(f.pos);
+      const k = this.fpvK * this.fpvK * (3 - 2 * this.fpvK);
+      cam.position.lerp(eye, k);
+      cam.quaternion.slerp(q, k);
+      const sk = Math.max(0, (f.speed - 33) / 30);
+      this.fovOut += (74 + 10 * Math.min(sk, 1.2) + 7 * f.boosting - this.fovOut) * k;
+    }
 
     const c = this.cine;
     if (c.on || c.k > 0) this._circle(dt, surfaceAt);

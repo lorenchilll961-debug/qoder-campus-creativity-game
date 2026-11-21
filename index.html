@@ -36,6 +36,14 @@
   <div class="prompt" id="prompt"></div>
   <div class="card" id="card"><div class="card-kicker" id="cardKicker"></div><div class="card-name" id="cardName"></div><div class="card-sub" id="cardSub"></div></div>
   <div class="toast" id="toast"></div>
+  <div id="goggles" hidden>
+    <div id="gLadder"></div>
+    <div id="gHdg"><div id="gHdgStrip"></div><div id="gHdgCaret"></div></div>
+    <div id="gWater"><i></i></div>
+    <div class="g-box" id="gSpeedBox"><b id="gSpeed">0</b><small>km/h</small><div class="g-gust"><i id="gGustFill"></i></div></div>
+    <div class="g-box" id="gAltBox"><b id="gAlt">0</b><small>米 · 离地</small></div>
+    <div id="gParcel" hidden><svg viewBox="-12 -12 24 24" width="24" height="24"><path d="M0 -9 L5 6 L0 3 L-5 6 Z" fill="currentColor"/></svg><span id="gParcelDist"></span></div>
+  </div>
 </div>
 
 <div id="title">
@@ -53,6 +61,15 @@
       <div><kbd>鼠标</kbd> 转向 · <kbd>C</kbd> 视角 · <kbd>I</kbd> 反转俯仰</div>
       <div><kbd>P</kbd> 隐藏界面 · <kbd>M</kbd> 静音 · <kbd>J</kbd> 手记</div>
     </div>
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="stick"><div id="stickNub"></div></div>
+  <div id="touchBtns">
+    <button class="tbtn" id="btnCam">视角</button>
+    <button class="tbtn" id="btnBoost">疾行</button>
+    <button class="tbtn" id="btnBrake">缓行</button>
   </div>
 </div>
 

@@ -484,9 +484,9 @@ export class Sprites {
 }
 
 // ======================================================================================= ribbon
-/** A fading camera-facing trail from a moving point. */
+/** A fading camera-facing trail from a moving point. mul = how opaque its heart is. */
 export class Ribbon {
-  constructor(len = 40, life = 0.75) {
+  constructor(len = 40, life = 0.75, mul = 0.35) {
     this.len = len;
     this.life = life;
     this.pts = new Float32Array(len * 3);
@@ -505,18 +505,19 @@ export class Ribbon {
     this.geo = g;
     this.strength = { value: 0 };
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uStrength: this.strength, uColor: { value: new THREE.Vector3(1, 1, 1) } },
+      uniforms: { uStrength: this.strength, uColor: { value: new THREE.Vector3(1, 1, 1) }, uMul: { value: mul } },
       vertexShader: /* glsl */`attribute vec3 aTrail; varying vec3 vUv; void main(){ vUv = aTrail; gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */`
         precision highp float;
         varying vec3 vUv;
         uniform float uStrength;
         uniform vec3 uColor;
+        uniform float uMul;
         void main(){
           float across = max(1.0 - abs(vUv.x * 2.0 - 1.0), 0.0);
           float fy = clamp(vUv.y, 0.0, 1.0);
           float a = pow(across, 1.6) * (1.0 - fy) * (1.0 - fy) * smoothstep(0.0, 0.06, fy) * uStrength * clamp(vUv.z, 0.0, 1.0);
-          gl_FragColor = vec4(uColor * a, a * 0.35);
+          gl_FragColor = vec4(uColor * a, a * uMul);
         }
       `,
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -531,7 +532,8 @@ export class Ribbon {
 
   reset() { this.age.fill(1e9); this.n = 0; }
 
-  update(dt, p, camPos, width, strength) {
+  /** fadeFar: metres along the trail before it thins out (short for a clinging wisp, long for a contrail). */
+  update(dt, p, camPos, width, strength, fadeFar = 3.4) {
     const L = this.len;
     for (let i = 0; i < L; i++) this.age[i] += dt;
     this._acc += dt;
@@ -563,7 +565,7 @@ export class Ribbon {
       P[o] = x - sx; P[o + 1] = y - sy; P[o + 2] = z - sz; P[o + 3] = x + sx; P[o + 4] = y + sy; P[o + 5] = z + sz;
       // fade with distance from the bristles, and long before the trail can sweep past the lens
       const dh = Math.hypot(x - p.x, y - p.y, z - p.z), dc = Math.sqrt(cx * cx + cy * cy + cz * cz);
-      const fade = Math.max(0, 1 - Math.max(0, dh - 0.8) / 3.4) * Math.min(1, Math.max(0, (dc - 2.5) / 3.5));
+      const fade = Math.max(0, 1 - Math.max(0, dh - 0.8) / fadeFar) * Math.min(1, Math.max(0, (dc - 2.5) / 3.5));
       const u = k * 6;
       UV[u] = 0; UV[u + 1] = live ? a : 1; UV[u + 2] = fade; UV[u + 3] = 1; UV[u + 4] = live ? a : 1; UV[u + 5] = fade;
       px = x; py = y; pz = z;

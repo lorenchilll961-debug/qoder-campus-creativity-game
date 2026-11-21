@@ -1,5 +1,5 @@
-// Input: keyboard, pointer-lock mouse (sprung virtual stick) and gamepad, merged into one state.
-// The brake doubles as the landing key: held it is the brake as ever, tapped twice inside
+// Input: keyboard, pointer-lock mouse (sprung virtual stick), gamepad and touch, merged into one
+// state. The brake doubles as the landing key: held it is the brake as ever, tapped twice inside
 // DOUBLE_TAP ms it also posts 'Space2' to `pressed` (come in to land; see game/index.js).
 const DOUBLE_TAP = 300;
 
@@ -9,6 +9,7 @@ export class Input {
     this.keys = new Set();
     this.stickX = 0;   // mouse stick
     this.stickY = 0;
+    this.touch = { x: 0, y: 0, boost: false, brake: false };   // virtual stick + buttons
     this.turn = 0;     // -1 left .. +1 right
     this.pitch = 0;    // -1 dive .. +1 climb
     this.boost = false;
@@ -41,6 +42,51 @@ export class Input {
     window.addEventListener('mousedown', (e) => { if (this.locked) { if (e.button === 0) this.mouseBoost = true; if (e.button === 2) { this.mouseBrake = true; this.pressed.add('Space'); this._tapBrake(e.timeStamp); } } });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseBoost = false; if (e.button === 2) this.mouseBrake = false; });
     window.addEventListener('contextmenu', (e) => { if (this.enabled) e.preventDefault(); });
+    this._bindTouch();
+  }
+
+  /** The on-screen stick and buttons (shown only on touch screens; see main.js). */
+  _bindTouch() {
+    const $ = (id) => document.getElementById(id);
+    const stick = $('stick'), nub = $('stickNub');
+    if (!stick) return;
+    let id = -1, cx = 0, cy = 0, R = 1;
+    const centre = () => {
+      const r = stick.getBoundingClientRect();
+      cx = r.left + r.width / 2; cy = r.top + r.height / 2; R = r.width / 2;
+    };
+    const move = (e) => {
+      let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R;
+      const l = Math.hypot(dx, dy);
+      if (l > 1) { dx /= l; dy /= l; }
+      this.touch.x = dx; this.touch.y = dy;
+      nub.style.transform = `translate(${dx * R * 0.5}px, ${dy * R * 0.5}px)`;
+    };
+    stick.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      id = e.pointerId; stick.setPointerCapture(id); centre(); move(e); stick.classList.add('on');
+    });
+    stick.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+    const up = (e) => {
+      if (e.pointerId !== id) return;
+      id = -1; this.touch.x = 0; this.touch.y = 0;
+      nub.style.transform = ''; stick.classList.remove('on');
+    };
+    stick.addEventListener('pointerup', up);
+    stick.addEventListener('pointercancel', up);
+    const hold = (el, set) => {
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); set(true); el.classList.add('on'); });
+      const off = () => { set(false); el.classList.remove('on'); };
+      el.addEventListener('pointerup', off);
+      el.addEventListener('pointercancel', off);
+    };
+    hold($('btnBoost'), (v) => { this.touch.boost = v; });
+    // the brake button keeps the double-tap-to-land the keyboard has
+    hold($('btnBrake'), (v) => {
+      this.touch.brake = v;
+      if (v) { this.pressed.add('Space'); this._tapBrake(performance.now()); }
+    });
+    $('btnCam').addEventListener('pointerdown', (e) => { e.preventDefault(); this.pressed.add('KeyC'); });
   }
 
   /** A tap of the brake at time t (ms): the second of two close together is a double tap. */
@@ -65,8 +111,11 @@ export class Input {
     this.stickX *= relax; this.stickY *= relax;
     x += this.stickX * 1.6;
     y += -this.stickY * 1.6;
-    let boost = k.has('ShiftLeft') || k.has('ShiftRight') || !!this.mouseBoost;
-    let brake = k.has('Space') || !!this.mouseBrake;
+    // the touch stick reads straight off where the thumb sits
+    x += this.touch.x * 1.35;
+    y += -this.touch.y * 1.35;
+    let boost = k.has('ShiftLeft') || k.has('ShiftRight') || !!this.mouseBoost || this.touch.boost;
+    let brake = k.has('Space') || !!this.mouseBrake || this.touch.brake;
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const p of pads) {
       if (!p || !p.connected) continue;

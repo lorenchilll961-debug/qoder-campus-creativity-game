@@ -101,3 +101,71 @@ kbd {
 .trick { margin-top: 12px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.75; transition: opacity 0.3s ease; }
 .trick kbd { min-width: 20px; padding: 2px 6px; margin-right: 8px; text-align: center; }
 .trick.cool { opacity: 0.3; }
+
+/* ---------- touch: a stick on the left thumb, three buttons on the right ---------- */
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 4; user-select: none; -webkit-user-select: none; }
+#stick {
+  position: absolute; left: 26px; bottom: 26px; width: 148px; height: 148px; border-radius: 50%;
+  background: rgba(255, 248, 236, 0.07); border: 1.5px solid rgba(255, 248, 236, 0.25);
+  pointer-events: auto; touch-action: none;
+}
+#stick.on { border-color: rgba(255, 211, 107, 0.6); }
+#stickNub {
+  position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #fff8ec, #ffd9e6 70%); box-shadow: 0 4px 18px rgba(0, 20, 50, 0.35);
+}
+#touchBtns { position: absolute; right: 24px; bottom: 24px; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+.tbtn {
+  pointer-events: auto; touch-action: none; border-radius: 50%;
+  font: 600 15px "LXGW WenKai", sans-serif; letter-spacing: 0.16em; color: var(--ink);
+  background: rgba(255, 248, 236, 0.08); border: 1.5px solid rgba(255, 248, 236, 0.28);
+}
+.tbtn.on { background: rgba(255, 211, 107, 0.3); border-color: var(--gold); }
+#btnCam { width: 68px; height: 68px; font-size: 13px; }
+#btnBoost { width: 104px; height: 104px; }
+#btnBrake { width: 84px; height: 84px; margin-right: 24px; }
+
+/* ---------- goggles: the first-person HUD, glued to the real horizon ---------- */
+#goggles { position: absolute; inset: 0; color: #ffe9c8; opacity: 0; transition: opacity 0.45s ease; }
+#goggles.on { opacity: 1; }
+#hud.goggles .hud-bl, #hud.goggles .hud-br { display: none; }
+#gLadder { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --ppr: 900px; will-change: transform; }
+.g-line {
+  position: absolute; left: 0; top: 0; height: 1.5px; width: 34vw;
+  transform: translate(-50%, calc(var(--r) * var(--ppr)));
+  background: linear-gradient(90deg, transparent, rgba(255, 233, 200, 0.8) 14%, rgba(255, 233, 200, 0.8) 86%, transparent);
+}
+.g-line.zero { width: 54vw; background: linear-gradient(90deg, transparent, rgba(255, 233, 200, 0.95) 10%, rgba(255, 233, 200, 0.95) 90%, transparent); }
+#gWater { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+#gWater i {
+  position: absolute; top: -1px; left: -14px; width: 10px; height: 2px; background: #ffe9c8; box-shadow: 0 0 8px rgba(255, 233, 200, 0.6);
+}
+#gWater i::before { content: ""; position: absolute; left: 18px; top: 0; width: 10px; height: 2px; background: #ffe9c8; }
+#gHdg {
+  position: absolute; left: 50%; top: 6.5%; transform: translateX(-50%); width: min(44vw, 560px); height: 40px; overflow: hidden;
+  border-bottom: 1px solid rgba(255, 233, 200, 0.4);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+#gHdgStrip { position: absolute; left: 0; top: 0; height: 100%; will-change: transform; }
+.g-tick { position: absolute; bottom: 0; width: 1px; height: 9px; background: rgba(255, 233, 200, 0.85); }
+.g-tick.major { height: 13px; width: 1.5px; }
+.g-tick span {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  font: 500 12px "LXGW WenKai", sans-serif; letter-spacing: 0.12em; white-space: nowrap; opacity: 0.9;
+}
+#gHdgCaret {
+  position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7px solid #ffe9c8;
+}
+.g-box { position: absolute; top: 50%; font: 400 32px/1 "LXGW WenKai", serif; font-style: normal; }
+.g-box small { display: block; margin-top: 6px; font: 500 10px "LXGW WenKai", sans-serif; letter-spacing: 0.26em; opacity: 0.65; font-style: normal; }
+#gSpeedBox { left: 13vw; transform: translateY(-135%); }
+#gAltBox { right: 13vw; transform: translateY(-135%); text-align: right; }
+.g-gust { margin-top: 9px; width: 118px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.g-gust i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #fff, var(--petal)); }
+#gParcel {
+  position: absolute; left: 50%; top: 57%; transform: translate(-50%, 0);
+  display: flex; align-items: center; gap: 8px; font: 500 13px "LXGW WenKai", sans-serif; letter-spacing: 0.14em; color: var(--gold);
+}
+#gParcel svg { filter: drop-shadow(0 0 6px rgba(255, 211, 107, 0.7)); transition: transform 0.12s linear; }

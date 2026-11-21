@@ -61,7 +61,8 @@ The first version, from before the towns, is still at <https://petalwake.non.io>
 | <kbd>Q</kbd> | kickflip, once you have caught ten wind seeds |
 | <kbd>J</kbd> | the journal of treasures found |
 | Mouse | click the view to steer with it; left button boosts, right button brakes |
-| <kbd>C</kbd> | camera: chase, low, far |
+| <kbd>C</kbd> | camera: chase, low, far, goggles (first-person, with the courier's HUD) |
+| Touch | a virtual stick steers; the buttons switch the view, boost, and brake (double-tap the brake to land) |
 | <kbd>I</kbd> | invert pitch |
 | <kbd>P</kbd> | hide the HUD |
 | <kbd>M</kbd> | mute |
