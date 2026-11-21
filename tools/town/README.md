@@ -1,6 +1,8 @@
-# The town kit
+# 花信风 · 城镇制作工具
 
-Every building in Petalwake's towns is modelled in Blender by a short Python script written with
+本目录用于离线制作岛上的建筑、街景和降落平台，普通试玩无需运行。世界资源已经随仓库提供；修改并重新烘焙前请备份 `assets/`。
+
+Every building in the island's towns is modelled in Blender by a short Python script written with
 this kit. `kit.py` is the vocabulary of shapes (walls with real openings, round and many-sided
 towers, stepped-course roofs, beams, stones, lathe-turned forms); `parts.py` is the dressing
 (windows, doors, galleries, railings, chimneys, dormers, signs, laundry, flags...). Read both files:
@@ -59,12 +61,13 @@ landmark may use up to 25,000. Small props: 100 to 2,500.
 
 ## Landing places
 
-About a quarter of the buildings have a place where the rider can land her broom: the briefs say
+About a quarter of the buildings have a place where the rider can land the magic carpet: the briefs say
 which. A landing place is a **clear, level floor high up**: a gallery round a tower under the
 eaves, a railed lighthouse-style walkway round a lantern, a flat roof terrace inside a parapet, an
 open belfry floor, a roof deck, a mill's stage. Requirements:
 
-- at least 0.75 m radius of clear floor around the spot (she stands there holding a 2 m broom);
+- at least 0.75 m radius of clear standing floor around the spot; separately reserve an unobstructed
+  flight envelope for the 1.90 × 2.84 m carpet. Runtime clearance checks determine whether an approach is safe;
 - open to the air on the approach side: a gap in the railing or no railing there, nothing
   overhead that she would have to duck under for at least 2.5 m above the floor along the approach;
 - 9 m or more above the ground for towers (roof decks on houses may be lower);
@@ -160,3 +163,7 @@ edge. `art/town/plan_<town>.png` is drawn on every run: look at it.
 - Iterate on every building at least twice after looking at its picture. Check both views: is the
   silhouette interesting, do the roofs meet the walls, is anything floating, buried, inside-out
   (dark faces) or poking through? Is the landing place really clear?
+
+## 参考来源
+
+城镇制作套件继承自 Petalwake（Jacob Miller，MIT），保留原始建模约定与工具说明。完整来源和素材许可见仓库根目录 [README](../../README.md#参考来源与许可) 与 [LICENSE](../../LICENSE)。
