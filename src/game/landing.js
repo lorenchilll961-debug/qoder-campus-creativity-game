@@ -311,7 +311,7 @@ export class Landing {
   /** Get back on and go. */
   takeoff() {
     if (this.state !== 'landed') return false;
-    if (this.walk?.jump.on) { this._fail('airborne', '请先落地，再按 G 骑上扫帚'); return false; }
+    if (this.walk?.jump.on) { this._fail('airborne', '请先落地，再按 G 坐上魔毯'); return false; }
     if (this.pad.kind === 'ground' || this.walk?.moved) {
       const env = this._env(), pos = this.walk.pos;
       const support = probeGround(env, pos.x, pos.z, { referenceY: pos.y });

@@ -104,18 +104,20 @@ export function groundAnchor(pos, yaw) {
   return { kind: 'ground', id: 'free-ground', name: '脚下落脚处', radius: 0.4, pos: { ...pos }, yaw, approach: yaw };
 }
 
-/** Broom/body clearance along a heading; height fields represent solids all the way down. */
+/** Carpet/body clearance along a heading; height fields represent solids all the way down. */
 export function airClear(env, pos, yaw) {
   const dx = Math.sin(yaw), dz = -Math.cos(yaw);
   for (let d = -1.45; d <= 1.55; d += 0.2) {
     const x = pos.x + dx * d, z = pos.z + dz * d;
-    for (const side of [-0.38, 0, 0.38]) {
+    for (const side of [-1, -0.5, 0, 0.5, 1]) {
       const sx = x - dz * side, sz = z + dx * side;
       const h = Math.max(env.terrain.heightAt(sx, sz), env.solid?.heightAt(sx, sz) ?? -Infinity,
         env.river?.levelAt(sx, sz) ?? -Infinity, 0);
       if (!Number.isFinite(h) || h > pos.y - 0.42) return false;
     }
-    if (!bodyClear(env, x, pos.y - 0.35, z, 1.8, 0.32)) return false;
+    for (const side of [-0.66, -0.33, 0, 0.33, 0.66]) {
+      if (!bodyClear(env, x - dz * side, pos.y - 0.35, z + dx * side, 1.8, 0.32)) return false;
+    }
   }
   return true;
 }

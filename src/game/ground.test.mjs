@@ -143,10 +143,21 @@ test('airborne horizontal sweep cannot pass a prop above standing head height', 
   assert.ok(jump.pos.x < 0.7); assert.equal(jump.blocked.code, 'clearance');
 });
 
-test('takeoff requires clearance for both ends of the broom and props', () => {
+test('takeoff requires clearance for the carpet ends, side edges and props', () => {
   const p = { x: 0, y: 10.82, z: 0 };
   assert.equal(airClear(flat(), p, 0), true);
   const env = { ...flat(), solid: { heightAt: (x, z) => z < -1 ? 14 : -1e9 } };
   assert.equal(airClear(env, p, 0), false);
   assert.equal(airClear({ ...flat(), props: { collide(q) { q.y++; return false; } } }, p, 0), false);
+  for (const side of [-1, 1]) {
+    for (const yaw of [0, Math.PI / 2, Math.PI / 4]) {
+      const lateral = (x, z) => (x * Math.cos(yaw) + z * Math.sin(yaw)) * side;
+      const wall = { ...flat(), solid: { heightAt: (x, z) => lateral(x, z) > 0.9 ? 14 : -1e9 } };
+      assert.equal(airClear(wall, p, yaw), false);
+      const prop = { ...flat(), props: { collide(q, radius) { return lateral(q.x, q.z) + radius > 0.9; } } };
+      assert.equal(airClear(prop, p, yaw), false);
+      const clear = { ...flat(), solid: { heightAt: (x, z) => lateral(x, z) > 1.05 ? 14 : -1e9 } };
+      assert.equal(airClear(clear, p, yaw), true);
+    }
+  }
 });

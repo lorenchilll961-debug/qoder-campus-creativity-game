@@ -417,9 +417,11 @@ async function readMage() {
   }));
   return loader.parseAsync(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '');
 }
+const carpetBytes = readFileSync(new URL('../../assets/models/vehicles/magic-carpet.glb', import.meta.url));
+const carpet = await new GLTFLoader().parseAsync(carpetBytes.buffer.slice(carpetBytes.byteOffset, carpetBytes.byteOffset + carpetBytes.byteLength), '');
 function standFixture(gltf) {
   const context = fixture(), { g } = context;
-  const rider = new Rider(null);
+  const rider = new Rider(null, carpet.scene.clone(true));
   g.rider = rider;
   const S = rider.setStand(gltf.scene, gltf.animations);
   g.flight.pos.set(0, 10.82, 0); g.flight.vel.set(0, 0, 0); g.flight.speed = 0;
@@ -458,13 +460,20 @@ test('Mage GLB retains its real skeleton and clips, normalizes to 2.05m, faces -
     assert.equal(S.model.getObjectByName(weapon.name), undefined);
   }
   assert.deepEqual(Object.keys(S.actions).sort(), ['Idle', 'Jump', 'Ride', 'Run', 'Walk']);
-  for (const [state, name] of Object.entries({ Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle', Ride: 'Sit_Chair_Idle' })) {
+  for (const [state, name] of Object.entries({ Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle' })) {
     const clip = gltf.animations.find((c) => c.name === name);
     assert.ok(clip?.duration > 0 && clip.tracks.length > 0, name);
     assert.equal(S.actions[state].getClip(), clip, 'actions must use the actual GLB clips');
     assert.equal(S.actions[state].getMixer(), S.mixer);
     assert.ok(clip.tracks.some((track) => track.name === 'hips.quaternion'));
   }
+  const floor = gltf.animations.find((clip) => clip.name === 'Sit_Floor_Idle');
+  const ride = S.actions.Ride.getClip();
+  assert.equal(ride.name, 'Mage_Carpet_Seat');
+  assert.equal(ride.duration, floor.duration);
+  assert.notEqual(ride, floor);
+  assert.deepEqual(ride.tracks.find((t) => t.name === 'lowerlegl.quaternion').values,
+    floor.tracks.find((t) => t.name === 'lowerlegl.quaternion').values);
   for (const name of ['Mage_LegLeft', 'Mage_LegRight']) {
     const mesh = S.model.getObjectByName(name);
     assert.ok(mesh.isSkinnedMesh);
@@ -578,7 +587,7 @@ test('Mage sole correction uses both animated leg SkinnedMesh bounds, not bone o
   advance(); near(soleY(), 10.08, 1e-5);
 });
 
-test('the same Mage stays visible on foot, jumping and riding an independent broom with the flight pose', async () => {
+test('the same Mage stays visible on foot, jumping and sitting on the carpet with the flight pose', async () => {
   const { rider, S, advance } = standFixture(await readMage());
   const visibleMeshes = () => {
     const meshes = [];
@@ -587,10 +596,9 @@ test('the same Mage stays visible on foot, jumping and riding an independent bro
   };
   const mage = [];
   S.model.traverse((mesh) => { if (mesh.isMesh) mage.push(mesh); });
-  const broom = rider.model;
-  assert.equal(broom.name, 'Mage_Broom');
-  assert.ok(broom.isMesh && !broom.isSkinnedMesh);
-  assert.ok(broom.geometry.attributes._wind.array.some((v) => v > 0), 'bristles and lantern retain wind motion');
+  assert.equal(rider.model.name, 'Magic_Carpet');
+  assert.equal(rider.meshes.length, 4);
+  assert.ok(rider.meshes.every((mesh) => !mesh.isSkinnedMesh));
   for (const airborne of [false, true]) {
     rider.airborne = airborne; advance(0.2);
     assert.equal(S.root.visible, true);
@@ -605,7 +613,7 @@ test('the same Mage stays visible on foot, jumping and riding an independent bro
   assert.equal(S.state, 'Ride');
   assert.equal(S.root.visible, true);
   assert.equal(rider.tilt.visible, true);
-  assert.deepEqual(visibleMeshes(), [broom, ...mage]);
+  assert.deepEqual(visibleMeshes(), [...rider.meshes, ...mage]);
   const time = S.actions.Ride.time;
   rider.seat.flip = 1.4; rider.seat.hop = 0.2; rider.seat.sy = 0.9;
   advance(0.1);
@@ -617,7 +625,115 @@ test('the same Mage stays visible on foot, jumping and riding an independent bro
   const hip = S.model.getObjectByName('upperlegl').getWorldPosition(new THREE.Vector3());
   const knee = S.model.getObjectByName('lowerlegl').getWorldPosition(new THREE.Vector3());
   const thigh = knee.sub(hip).applyQuaternion(S.root.getWorldQuaternion(new THREE.Quaternion()).invert());
-  assert.ok(Math.abs(thigh.z) > Math.abs(thigh.y) * 3, 'riding uses bent thighs, not an upright standing Mage');
+  assert.ok(Math.abs(thigh.z) > Math.abs(thigh.y), 'floor sitting bends the thighs forward');
+});
+
+function boundsOnCarpet(rider, meshes) {
+  const bounds = new THREE.Box3(), p = new THREE.Vector3();
+  rider.group.updateMatrixWorld(true);
+  const inverse = rider.model.matrixWorld.clone().invert();
+  for (const mesh of meshes) for (let i = 0; i < mesh.geometry.attributes.position.count; i++) {
+    mesh.getVertexPosition(i, p).applyMatrix4(mesh.matrixWorld).applyMatrix4(inverse);
+    bounds.expandByPoint(p);
+  }
+  return bounds;
+}
+
+test('enlarged carpet keeps the source materials, fits landing clearance and only ripples its edges', () => {
+  const original = [];
+  carpet.scene.traverse((mesh) => { if (mesh.isMesh) original.push(mesh); });
+  const rider = new Rider(null, carpet.scene.clone(true));
+  const box = new THREE.Box3().setFromObject(rider.model, true);
+  near(box.max.x - box.min.x, 1.9, 1e-6);
+  assert.ok(box.min.z > -LAND.NOSE && box.max.z < LAND.TAIL);
+  assert.ok(box.max.z - box.min.z > 2.8);
+  assert.ok(box.min.y > -0.3 && box.max.y < 0.3);
+  for (const [i, mesh] of rider.meshes.entries()) {
+    assert.ok(mesh.material.isMeshStandardMaterial);
+    assert.ok(mesh.material.color.equals(original[i].material.color));
+    assert.equal(mesh.material.map, null);
+    assert.notEqual(mesh.geometry, original[i].geometry);
+  }
+  rider._animateCarpet(0.4, 1);
+  const first = rider.cloth.map(({ geometry }) => geometry.attributes.position.array.slice());
+  let moved = 0;
+  for (const { geometry, rest } of rider.cloth) {
+    const p = geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      near(p.getX(i), rest[i * 3]); near(p.getZ(i), rest[i * 3 + 2]);
+      const dy = Math.abs(p.getY(i) - rest[i * 3 + 1]);
+      if (Math.abs(p.getZ(i)) <= 0.84) near(dy, 0);
+      assert.ok(dy <= 0.045001);
+      if (dy > 0.005) moved++;
+    }
+  }
+  assert.ok(moved > 20);
+  rider._animateCarpet(4, 1); rider._animateCarpet(0.4, 1);
+  rider.cloth.forEach(({ geometry }, i) => assert.deepEqual(geometry.attributes.position.array, first[i]));
+  rider._animateCarpet(2, 0);
+  for (const { geometry, rest } of rider.cloth) assert.deepEqual(geometry.attributes.position.array, rest);
+});
+
+test('flight wall and prop clearance cover the enlarged carpet without changing steering', () => {
+  for (const side of [-1, 1]) {
+    const { g } = fixture(), f = g.flight;
+    f.solid = { heightAt: (x) => x * side > 0.94 ? 40 : -1e9 };
+    f._solidWalls(1 / 60, 0, 0, 0);
+    assert.ok(f.pos.x * side + 0.95 < 0.94);
+    near(f.yaw, 0);
+  }
+  const { g } = fixture();
+  let radius;
+  g.flight.props = { collide(p, r) { radius = r; return false; } };
+  g.flight.update(1 / 60, idle, 0);
+  near(radius, 1.2);
+  near(g.flight.yaw, 0);
+  assert.ok(g.flight.speed > 20);
+});
+
+test('floor-sit stays on the carpet through breathing, bank, pitch and flip without dangling boots or cape', async () => {
+  const { g, rider, S, advance } = standFixture(await readMage());
+  const source = S.model.getObjectByName('Mage_Cape').quaternion.clone();
+  rider.off.on = false; advance(0.2);
+  const cape = S.model.getObjectByName('Mage_Cape');
+  for (let i = 0; i < 24; i++) {
+    g.flight.roll = Math.sin(i) * 0.92;
+    g.flight.pitch = Math.sin(i * 0.7) * 1.1;
+    rider.seat.flip = i > 12 ? (i - 12) * Math.PI / 6 : 0;
+    advance(1 / 6);
+    const feet = boundsOnCarpet(rider, S.contactMeshes);
+    assert.ok(feet.min.y >= 0.015 && feet.min.y <= 0.05, `contact ${feet.min.y}`);
+    assert.ok(feet.min.x > -0.46 && feet.max.x < 0.46);
+    assert.ok(feet.min.z > -0.6 && feet.max.z < 0.5);
+    assert.ok(boundsOnCarpet(rider, [cape]).min.y > 0.2);
+    const hips = S.model.getObjectByName('hips').getWorldPosition(new THREE.Vector3()).applyMatrix4(rider.model.matrixWorld.clone().invert());
+    assert.ok(Math.hypot(hips.x, hips.z) < 0.025);
+  }
+  rider.off.on = true; advance(0.2);
+  near(cape.quaternion.angleTo(source), 0, 1e-6);
+});
+
+test('mounting raises the carpet beneath the blending feet without changing flight position or clipping', async () => {
+  const { g, L, rider, S, advance } = standFixture(await readMage());
+  assert.equal(L.beginGround().ok, true);
+  for (let i = 0; i < 3000 && L.state !== 'landed'; i++) { tick(g, L); advance(); }
+  assert.equal(L.state, 'landed');
+  for (let i = 0; i < 20; i++) { tick(g, L); advance(); }
+  assert.equal(L.takeoff(), true);
+  let blends = 0;
+  for (let i = 0; i < 50; i++) {
+    tick(g, L);
+    const pos = g.flight.pos.clone();
+    advance();
+    assert.ok(g.flight.pos.equals(pos));
+    if (rider.tilt.visible) {
+      const bounds = boundsOnCarpet(rider, S.contactMeshes);
+      assert.ok(bounds.min.y >= 0.024, `mount foot ${bounds.min.y}`);
+      if (S.actions.Ride.getEffectiveWeight() < 1) blends++;
+    }
+  }
+  assert.ok(blends >= 8);
+  near(rider.model.position.y, 0);
 });
 
 test('landing, remounting and launch retain the identical Mage meshes across repeated full round trips', async () => {
@@ -631,7 +747,7 @@ test('landing, remounting and launch retain the identical Mage meshes across rep
     rider.group.traverseVisible((o) => { if (o.isMesh) visible.push(o); });
     assert.equal(rider.standing.model, S.model);
     assert.ok(mage.every((mesh) => visible.includes(mesh)), `${L.state}: Mage disappeared`);
-    assert.ok(visible.every((mesh) => mesh === rider.model || mage.includes(mesh)), `${L.state}: unexpected avatar`);
+    assert.ok(visible.every((mesh) => rider.meshes.includes(mesh) || mage.includes(mesh)), `${L.state}: unexpected avatar`);
   };
   for (let round = 0; round < 2; round++) {
     assert.equal(L.beginGround().ok, true);
