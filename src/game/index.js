@@ -1,18 +1,18 @@
 // Errands: landing on the town's pads, carrying parcels between them, and a trick.
 //
-// Everything to do with pads hangs off game.town - { pads, heightAt(x, z) }, see world/town.js -
-// and is asleep while that has no pads: no beacons, nothing on the HUD, nothing in the flight
-// model. The town may be assigned, swapped or grow more pads at any time; it is looked at afresh
-// every step. ?padtest stands three plain towers and a shed up as well (padtest.js).
+// Pad errands hang off game.town - { pads, heightAt(x, z) }, see world/town.js. Ordinary ground
+// landing and walking are independent of those pads. The town may be assigned, swapped or grow
+// more pads at any time; it is looked at afresh every step. ?padtest also adds plain test towers.
 //
 // main.js makes one of these and calls update() once a step, before the flight model moves.
-// Debug hooks (on the game object, window.PW): land(padId?), takeoff(), kickflip(), padsNear().
+// Debug hooks (on window.PW): land(padId?), landGround(), takeoff(), kickflip(), padsNear().
 import { buildPadTest } from './padtest.js';
 import { Beacons } from './beacons.js';
 import { Landing, LAND } from './landing.js';
 import { Courier } from './courier.js';
 import { Kickflip } from './tricks.js';
 import { Hud } from './hud.js';
+import { WorldMap } from '../ui/world-map.js';
 
 /** localStorage, where there is one (private windows and embeds may refuse). */
 class Store {
@@ -42,37 +42,28 @@ export class Gameplay {
     this.beacons = null;
     this.zone = null;             // the pad that can be landed on right now
     this.hush = 0;                // seconds before a pad just left lights up again
-    this.playing = false;
-    this.intro = -1;
     this.courier = new Courier(game, this.store, this.hud);
     this.trick = new Kickflip(game, this.store, this.hud);
     this.landing = new Landing(game, {
-      touch: (pad) => this.courier.arrive(pad),
+      touch: (pad) => { if (pad.kind !== 'ground') this.courier.arrive(pad); },
       leave: () => { this.hush = 2.4; },
       broke: () => { this.hush = 1.2; },
     });
     if (this.trick.unlocked) this.hud.hint('flip', '<kbd>Q</kbd> 凌空翻身');
 
+    game.landGround = () => this.landing.beginGround();
     game.land = (id) => this.land(id);
     game.takeoff = () => this.landing.takeoff();
     game.kickflip = () => this.trick.start(true);
     game.padsNear = () => this.padsNear();
     this._bind();
-    this._loadStand();
+    this.standReady = game.rider.loadStand();
   }
 
-  /** The standing rider, if the file is there (she sets the broom down and stays on it otherwise). */
-  async _loadStand() {
-    const base = './assets/models', name = this.params.get('stand') || 'rider_stand';
-    try {
-      // asking for a file that is not there writes an error to the console: where the server
-      // lists its folders (the dev server does), look before asking
-      if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-        const list = await fetch(`${base}/`).then((r) => (r.ok ? r.text() : '')).catch(() => '');
-        if (list && !list.includes(`${name}.glb`)) return;
-      }
-      await this.game.rider.loadStand(base, name);
-    } catch { /* no standing model */ }
+  async attachUi() {
+    await this.courier.attachUi();
+    this.map = new WorldMap(this.game, this.courier);
+    document.getElementById('openWorldMap').addEventListener('click', () => this.map.open());
   }
 
   /** game.town has changed: its buildings become solid, its pads come alive. */
@@ -104,7 +95,7 @@ export class Gameplay {
       g.pipeline.overlay.add(this.beacons.group);
       this.hud.hint('land', '<kbd>Space</kbd><kbd>Space</kbd> 降落到塔顶');
     }
-    if (this.landing.busy && !this.open.includes(this.landing.pad)) this.landing.abort();
+    if (this.landing.busy && this.landing.pad?.kind !== 'ground' && !this.open.includes(this.landing.pad)) this.landing.abort();
     this.zone = null;
     this.courier.setPads(this.open);
   }
@@ -114,6 +105,8 @@ export class Gameplay {
     const f = this.game.flight, L = this.landing;
     if (L.busy) return L.state === 'approach' || L.state === 'settle' ? L.pad : null;
     if (this.hush > 0) return null;
+    const target = this.courier.target;
+    if (target && Math.hypot(target.pos.x - f.pos.x, target.pos.y - f.pos.y, target.pos.z - f.pos.z) < LAND.RANGE) return target;
     let best = null, bd = Infinity;
     for (const p of this.open) {
       const d = Math.hypot(p.pos.x - f.pos.x, p.pos.y - f.pos.y, p.pos.z - f.pos.z) - (p === this.zone ? 6 : 0);
@@ -126,10 +119,12 @@ export class Gameplay {
     const L = this.landing;
     let html = null;
     if (play) {
-      if (L.state === 'landed') html = '<kbd>Space</kbd> 起飞';
+      if (L.state === 'landed') html = L.stand ? '<kbd>WASD</kbd> 步行 · <kbd>Shift</kbd> 奔跑 · 鼠标环顾 · <kbd>Space</kbd> 跳跃 · <kbd>G</kbd> 起飞' : '<kbd>G</kbd> 起飞 · 站立模型未加载，暂不可步行';
       else if (L.state === 'approach' || L.state === 'settle') html = `正在降落 <em>${esc(L.pad.name)}</em><small><kbd>Shift</kbd> 拉起放弃</small>`;
-      else if (L.state === 'fly' && this.zone) html = `<kbd>Space</kbd><span class="x2">×2</span> 降落<em>${esc(this.zone.name)}</em>`;
+      else if (L.state === 'fly' && this.zone) html = `<kbd>Space</kbd><span class="x2">×2</span> 降落<em>${esc(this.zone.name)}</em> · <kbd>G</kbd> 脚下落地`;
+      else if (L.state === 'fly') html = '<kbd>G</kbd> 脚下落地 · 或双击 <kbd>Space</kbd>';
     }
+    if (play && L.landed && this.courier.nearby()) html = `按 <kbd>E</kbd> 交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>G</kbd> 起飞`;
     this.hud.prompt(html);
   }
 
@@ -141,7 +136,8 @@ export class Gameplay {
 
     // keys are drained every step and acted on only while she is being flown
     const play = g.state === 'play', inp = g.input;
-    const tapLand = inp.take('Space2'), tapSpace = inp.take('Space'), tapQ = inp.take('KeyQ');
+    const tapLand = inp.take('Space2'), tapSpace = inp.take('Space'), tapQ = inp.take('KeyQ'), tapGround = inp.take('KeyG'), tapInteract = inp.take('KeyE');
+    if (play && tapInteract && this.courier.interact()) return;
 
     // the trick and the landing each pose the seated rider from a clean slate
     const seat = g.rider.seat;
@@ -151,21 +147,18 @@ export class Gameplay {
 
     L.update(dt, ctl);
     if (this.hush > 0) this.hush -= dt;
-    if (this.open.length) {
-      this.zone = play || this.debug ? this._zone() : null;
-      if (play) {
-        if (L.state === 'fly' && tapLand && this.zone) L.begin(this.zone);
-        else if (L.landed && (tapSpace || tapLand)) L.takeoff();
-        // the first job is announced once she is under way
-        if (!this.playing) { this.playing = true; this.intro = 2.4; }
-        if (this.intro > 0 && (this.intro -= dt) <= 0 && this.courier.target && !L.busy) {
-          this.hud.card('这份包裹送往', this.courier.target.name, '循着金光飞去 · 在降落点旁连按两次 Space 落地', 5);
-        }
+    this.zone = play || this.debug ? this._zone() : null;
+    if (play) {
+      if (L.landed && tapGround) L.takeoff();
+      else if (L.landed && tapSpace) { if (L.stand) L.jump(); else L.takeoff(); }
+      else if (L.state === 'fly' && tapGround) L.beginGround();
+      else if (L.state === 'fly' && tapLand) {
+        if (this.zone) L.begin(this.zone); else L.beginGround();
       }
-      this.beacons.update(dt, f.pos, this.zone, this.courier.target, L.pad);
-      this.courier.update(dt);
-      this._prompt(play);
-    } else this.hud.prompt(null);
+    }
+    if (this.beacons) this.beacons.update(dt, f.pos, this.zone, this.courier.target, L.pad);
+    this.courier.update(dt, ctl);
+    this._prompt(play);
     this.hud.update(dt);
   }
 
