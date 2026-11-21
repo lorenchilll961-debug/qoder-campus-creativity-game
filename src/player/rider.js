@@ -1,40 +1,68 @@
-// The rider: Meshy model with wind-driven secondary motion (cape, bristles, hat, swinging lantern),
-// lit by the sun + sky, casting a crisp shadow onto the world through its own small shadow map.
-//
-// Two poses beyond plain riding, both driven from outside (game/landing.js, game/tricks.js):
-//   seat - the seated model lifted, squashed or rolled about the broom (hops, the kickflip);
-//   off  - dismounted: the animated Mage takes the broom rider's place.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { U } from '../core/ctx.js';
 
-const SCALE = 1.28;
+const LANTERN_PIVOT = [0, -0.035, -0.96];
 const SHADOW_SIZE = 1024;
 const SHADOW_EXTENT = 3.4; // half-width of the shadow box in metres
 const STAND_HEIGHT = 2.05;
-const STAND_CLIPS = { Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle' };
+const STAND_CLIPS = { Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle', Ride: 'Sit_Chair_Idle' };
+
+function makeBroom() {
+  const parts = [];
+  const part = (geometry, color, x, y, z, bristles = false, lantern = false) => {
+    geometry.translate(x, y, z);
+    const p = geometry.attributes.position, c = new THREE.Color(color);
+    const colors = new Float32Array(p.count * 3), wind = new Float32Array(p.count * 4);
+    for (let i = 0; i < p.count; i++) {
+      c.toArray(colors, i * 3);
+      wind[i * 4 + 1] = bristles ? THREE.MathUtils.clamp((p.getZ(i) - 0.75) / 0.65, 0, 1) : 0;
+      wind[i * 4 + 3] = lantern ? 1 : 0;
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('_wind', new THREE.BufferAttribute(wind, 4));
+    parts.push(geometry);
+  };
+  const handle = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.01, 1.05), new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0.05, -0.6), new THREE.Vector3(0, 0.27, -1.18),
+  ]);
+  part(new THREE.TubeGeometry(handle, 20, 0.038, 6, false), 0x77513b, 0, 0, 0);
+  for (let i = 0; i < 9; i++) {
+    const a = i * Math.PI * 2 / 9;
+    const straw = new THREE.CylinderGeometry(0.035, 0.09, 0.75, 5).rotateX(-Math.PI / 2);
+    straw.rotateY(Math.cos(a) * 0.16).rotateX(Math.sin(a) * 0.16);
+    part(straw, i % 2 ? 0xc7994d : 0xdfb865, Math.cos(a) * 0.095, Math.sin(a) * 0.075, 1.12, true);
+  }
+  for (const z of [0.76, 0.83]) part(new THREE.TorusGeometry(0.115, 0.022, 5, 10), 0x5b385b, 0, 0, z);
+  part(new THREE.TorusGeometry(0.053, 0.009, 5, 10), 0x936b37, 0, -0.087, -0.96, false, true);
+  part(new THREE.CylinderGeometry(0.059, 0.065, 0.13, 6), 0xffd58b, 0, -0.21, -0.96, false, true);
+  for (const y of [-0.135, -0.285]) part(new THREE.CylinderGeometry(0.077, 0.077, 0.026, 6), 0x936b37, 0, y, -0.96, false, true);
+  const geometry = mergeGeometries(parts);
+  for (const p of parts) p.dispose();
+  const broom = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }));
+  broom.name = 'Mage_Broom';
+  return broom;
+}
 
 export class Rider {
-  static async load(renderer, base = './assets/models') {
-    const [gltf, info] = await Promise.all([
-      new GLTFLoader().loadAsync(`${base}/rider.glb`),
-      fetch(`${base}/rider.json`).then((r) => r.json()),
-    ]);
-    return new Rider(renderer, gltf.scene, info);
+  static load(renderer) {
+    return new Rider(renderer);
   }
 
-  constructor(renderer, model, info) {
+  constructor(renderer) {
+    const model = makeBroom();
     this.renderer = renderer;
     this.group = new THREE.Group();      // world pose
     this.tilt = new THREE.Group();       // local bob / lean
     this.group.add(this.tilt);
     this.tilt.add(model);
-    model.scale.setScalar(SCALE);
     this.model = model;
     this.uniforms = {
       uRiderTime: { value: 0 },
       uRiderWind: { value: 1 },
-      uLanternPivot: { value: new THREE.Vector3().fromArray(info.lanternPivot) },
+      uLanternPivot: { value: new THREE.Vector3().fromArray(LANTERN_PIVOT) },
       uLantern: { value: new THREE.Vector2() },
     };
     this.lantern = { ax: 0, az: 0, vx: 0, vz: 0 };
@@ -175,7 +203,15 @@ export class Rider {
     model.scale.setScalar(scale);
     model.position.y = -box.min.y * scale;
     root.add(model);
-    root.visible = false;
+    actions.Idle.stop();
+    actions.Ride.play();
+    mixer.update(0);
+    root.updateMatrixWorld(true);
+    const rideOffset = new THREE.Vector3(0, 0.13, 0).sub(model.getObjectByName('hips').getWorldPosition(new THREE.Vector3()));
+    actions.Ride.stop();
+    actions.Idle.reset().play();
+    mixer.update(0);
+    root.updateMatrixWorld(true);
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.frustumCulled = false;
@@ -193,28 +229,31 @@ export class Rider {
     // Planted-sole speeds measured from the bundled in-place clips, before scaling.
     this.standing = { root, model, height: STAND_HEIGHT, mixer, actions, state: 'Idle',
       legs: ['Mage_LegLeft', 'Mage_LegRight'].map((name) => model.getObjectByName(name)),
-      footBox: new THREE.Box3(), stride: { Walk: 0.74 * scale, Run: 4.4 * scale } };
+      footBox: new THREE.Box3(), stride: { Walk: 0.74 * scale, Run: 4.4 * scale },
+      rideOffset, ridePosition: new THREE.Vector3(), groundY: 0 };
     return this.standing;
   }
 
   _animateStand(dt, flight, terrain) {
     const S = this.standing, o = this.off;
-    S.root.visible = o.on;
     this.tilt.visible = !o.on;
-    const state = !o.on ? 'Idle' : this.airborne ? 'Jump' : this.walkSpeed < 0.04 ? 'Idle' : this.walkFast ? 'Run' : 'Walk';
+    const state = !o.on ? 'Ride' : this.airborne ? 'Jump' : this.walkSpeed < 0.04 ? 'Idle' : this.walkFast ? 'Run' : 'Walk';
     if (state !== S.state) {
       const previous = S.actions[S.state], next = S.actions[state];
       next.reset().setEffectiveWeight(1).play();
       previous.crossFadeTo(next, 0.18, false);
       S.state = state;
     }
-    if (!o.on) return;
     for (const name of ['Walk', 'Run']) S.actions[name].setEffectiveTimeScale(this.walkSpeed / S.stride[name]);
     S.mixer.update(dt);
-    S.root.position.set(0, o.y, 0);
+    const ride = S.actions.Ride.isScheduled() ? S.actions.Ride.getEffectiveWeight() : 0;
+    if (o.on) S.groundY = o.y;
+    S.ridePosition.copy(S.rideOffset).multiply(this.tilt.scale).applyQuaternion(this.tilt.quaternion).add(this.tilt.position);
+    S.root.position.set(0, S.groundY, 0).lerp(S.ridePosition, ride);
+    S.root.quaternion.identity().slerp(this.tilt.quaternion, ride);
     const wide = 1 / Math.sqrt(o.sy);
-    S.root.scale.set(wide, o.sy, wide);
-    if (this.airborne || o.sy !== 1) return;
+    S.root.scale.set(wide, o.sy, wide).lerp(this.tilt.scale, ride);
+    if (!o.on || ride > 0 || this.airborne || o.sy !== 1) return;
     this.group.updateMatrixWorld(true);
     let correction = -Infinity;
     for (const mesh of S.legs) {

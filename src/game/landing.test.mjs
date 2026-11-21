@@ -419,7 +419,7 @@ async function readMage() {
 }
 function standFixture(gltf) {
   const context = fixture(), { g } = context;
-  const rider = new Rider(null, new THREE.Group(), { lanternPivot: [0, 0, 0] });
+  const rider = new Rider(null);
   g.rider = rider;
   const S = rider.setStand(gltf.scene, gltf.animations);
   g.flight.pos.set(0, 10.82, 0); g.flight.vel.set(0, 0, 0); g.flight.speed = 0;
@@ -457,8 +457,8 @@ test('Mage GLB retains its real skeleton and clips, normalizes to 2.05m, faces -
     assert.equal(weapon.parent, null);
     assert.equal(S.model.getObjectByName(weapon.name), undefined);
   }
-  assert.deepEqual(Object.keys(S.actions).sort(), ['Idle', 'Jump', 'Run', 'Walk']);
-  for (const [state, name] of Object.entries({ Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle' })) {
+  assert.deepEqual(Object.keys(S.actions).sort(), ['Idle', 'Jump', 'Ride', 'Run', 'Walk']);
+  for (const [state, name] of Object.entries({ Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle', Ride: 'Sit_Chair_Idle' })) {
     const clip = gltf.animations.find((c) => c.name === name);
     assert.ok(clip?.duration > 0 && clip.tracks.length > 0, name);
     assert.equal(S.actions[state].getClip(), clip, 'actions must use the actual GLB clips');
@@ -578,28 +578,75 @@ test('Mage sole correction uses both animated leg SkinnedMesh bounds, not bone o
   advance(); near(soleY(), 10.08, 1e-5);
 });
 
-test('walking and jumping show Mage while hiding the seated broom; remounting restores the broom', async () => {
+test('the same Mage stays visible on foot, jumping and riding an independent broom with the flight pose', async () => {
   const { rider, S, advance } = standFixture(await readMage());
   const visibleMeshes = () => {
     const meshes = [];
     rider.group.traverseVisible((o) => { if (o.isMesh) meshes.push(o); });
     return meshes;
   };
-  // A visible child makes the seated branch's inherited visibility observable without WebGL.
-  const broom = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 2), new THREE.MeshBasicMaterial());
-  rider.model.add(broom);
+  const mage = [];
+  S.model.traverse((mesh) => { if (mesh.isMesh) mage.push(mesh); });
+  const broom = rider.model;
+  assert.equal(broom.name, 'Mage_Broom');
+  assert.ok(broom.isMesh && !broom.isSkinnedMesh);
+  assert.ok(broom.geometry.attributes._wind.array.some((v) => v > 0), 'bristles and lantern retain wind motion');
   for (const airborne of [false, true]) {
-    rider.airborne = airborne; advance();
+    rider.airborne = airborne; advance(0.2);
     assert.equal(S.root.visible, true);
     assert.equal(rider.tilt.visible, false);
-    assert.ok(visibleMeshes().some((mesh) => mesh.isSkinnedMesh));
-    assert.ok(!visibleMeshes().includes(broom));
+    assert.deepEqual(visibleMeshes(), mage);
     assert.equal(S.state, airborne ? 'Jump' : 'Idle');
   }
-  rider.off.on = false; advance();
-  assert.equal(S.root.visible, false);
+  rider.off.on = false; advance(0.09);
+  near(S.actions.Ride.getEffectiveWeight(), 0.5, 1e-6);
+  assert.ok(mage.every((mesh) => visibleMeshes().includes(mesh)));
+  advance(0.1);
+  assert.equal(S.state, 'Ride');
+  assert.equal(S.root.visible, true);
   assert.equal(rider.tilt.visible, true);
-  assert.equal(S.state, 'Idle');
-  assert.ok(visibleMeshes().includes(broom));
-  assert.ok(!visibleMeshes().some((mesh) => mesh.isSkinnedMesh));
+  assert.deepEqual(visibleMeshes(), [broom, ...mage]);
+  const time = S.actions.Ride.time;
+  rider.seat.flip = 1.4; rider.seat.hop = 0.2; rider.seat.sy = 0.9;
+  advance(0.1);
+  assert.ok(S.actions.Ride.time > time, 'the sitting animation must keep playing during flight');
+  near(S.root.quaternion.angleTo(rider.tilt.quaternion), 0);
+  near(S.root.scale.distanceTo(rider.tilt.scale), 0);
+  const expected = S.rideOffset.clone().multiply(rider.tilt.scale).applyQuaternion(rider.tilt.quaternion).add(rider.tilt.position);
+  near(S.root.position.distanceTo(expected), 0);
+  const hip = S.model.getObjectByName('upperlegl').getWorldPosition(new THREE.Vector3());
+  const knee = S.model.getObjectByName('lowerlegl').getWorldPosition(new THREE.Vector3());
+  const thigh = knee.sub(hip).applyQuaternion(S.root.getWorldQuaternion(new THREE.Quaternion()).invert());
+  assert.ok(Math.abs(thigh.z) > Math.abs(thigh.y) * 3, 'riding uses bent thighs, not an upright standing Mage');
+});
+
+test('landing, remounting and launch retain the identical Mage meshes across repeated full round trips', async () => {
+  const { g, L, rider, S, advance } = standFixture(await readMage());
+  const mage = [];
+  S.model.traverse((mesh) => { if (mesh.isMesh) mage.push(mesh); });
+  const states = new Set();
+  const step = () => {
+    tick(g, L); advance(); states.add(L.state);
+    const visible = [];
+    rider.group.traverseVisible((o) => { if (o.isMesh) visible.push(o); });
+    assert.equal(rider.standing.model, S.model);
+    assert.ok(mage.every((mesh) => visible.includes(mesh)), `${L.state}: Mage disappeared`);
+    assert.ok(visible.every((mesh) => mesh === rider.model || mage.includes(mesh)), `${L.state}: unexpected avatar`);
+  };
+  for (let round = 0; round < 2; round++) {
+    assert.equal(L.beginGround().ok, true);
+    for (let i = 0; i < 3000 && L.state !== 'landed'; i++) step();
+    assert.equal(L.state, 'landed');
+    for (let i = 0; i < 15; i++) step();
+    assert.equal(S.state, 'Idle');
+    assert.equal(L.takeoff(), true);
+    for (let i = 0; i < 3000 && L.state !== 'fly'; i++) step();
+    assert.equal(L.state, 'fly');
+    for (let i = 0; i < 15; i++) step();
+    assert.equal(S.state, 'Ride');
+    near(S.actions.Ride.getEffectiveWeight(), 1);
+    assert.equal(rider.tilt.visible, true);
+    assert.equal(g.flight.auto, null);
+  }
+  for (const state of ['approach', 'settle', 'dismount', 'landed', 'mount', 'launch', 'fly']) assert.ok(states.has(state), state);
 });
