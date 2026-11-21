@@ -7,7 +7,7 @@
 //   dismount  a hop off the broom: crouch, spring, a puff of dust at the top of it (which is where
 //             the seated model gives way to the standing one), a turn in the air to face the view,
 //             boots down on the mark with a squash
-//   landed    she stands there for as long as you like
+//   landed    she can stand or walk on checked support, with a camera-relative heading
 //   mount     the hop back on
 //   launch    off the edge the way she was facing, a dip to pick up speed, and the broom is yours
 //
@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { planApproach, APPROACH } from './approach.js';
 import { SPEEDS } from '../player/flight.js';
+import { WALK, probeGround, moveGround, groundAnchor, groundFailure, airClear, bodyClear } from './ground.js';
 import { puff, dustRing, twinkle, PALE } from './sparks.js';
 
 const TAU = Math.PI * 2;
@@ -96,6 +97,10 @@ export class Landing {
     this.fired = {};
     this.dep = null;
     this.out = 0;                       // the heading she leaves on
+    this.walk = null;                   // own foot position; never writes into a town pad
+    this.departPad = null;
+    this.lastFailure = null;
+    this.controls = null;
     this._ways = new WeakMap();         // pad -> the ways on and off it that are open (see way())
     this.script = { step: (dt, time, f) => this._step(dt, time, f), quiet: false };
   }
@@ -111,13 +116,35 @@ export class Landing {
     if (f.solid) {
       // (on the pad itself its own floor is the truth: the grid of roof heights is too coarse to
       // tell a mark painted at the foot of a wall from the wall)
-      if (pad && (x - pad.pos.x) ** 2 + (z - pad.pos.z) ** 2 < (pad.radius + 0.6) ** 2) h = Math.max(h, pad.pos.y);
+      if (pad && pad.kind !== 'ground' && (x - pad.pos.x) ** 2 + (z - pad.pos.z) ** 2 < (pad.radius + 0.6) ** 2) h = Math.max(h, pad.pos.y);
       else { const s = f.solid.heightAt(x, z); if (s > h) h = s; }
     }
     return h;
   }
 
-  floorAt(x, z) { return this._floor(this.pad, x, z); }
+  floorAt(x, z) { return this._floor(this.departPad || this.pad, x, z); }
+
+  _env() { const f = this.game.flight; return { terrain: this.game.terrain, river: f.river, solid: f.solid, props: f.props }; }
+
+  _fail(code, why) {
+    const result = why ? { ok: false, code, why } : groundFailure(code);
+    this.lastFailure = result;
+    this.game.toast?.(result.why);
+    return result;
+  }
+
+  /** Request the support directly below, never a teleport or a synthetic town pad. */
+  beginGround() {
+    if (this.busy) return this._fail('busy', '正在起落，请稍候');
+    if (!this.game.rider.standing) return this._fail('model', '站立模型尚未加载，暂不能落地步行');
+    const f = this.game.flight;
+    const support = probeGround(this._env(), f.pos.x, f.pos.z, { maxY: f.pos.y - 0.42 });
+    if (!support.ok) return this._fail(support.code);
+    if (!bodyClear(this._env(), support.pos.x, support.pos.y, support.pos.z, WALK.height + 0.55)) return this._fail('clearance');
+    const anchor = groundAnchor(support.pos, f.yaw);
+    if (!this.begin(anchor)) return this._fail('clearance', '没有安全的降落航线或离地净空，请换一处落地');
+    return { ok: true, kind: 'ground', pos: { ...anchor.pos } };
+  }
 
   /**
    * The ways on to and off a pad that are really open, going by what stands round it: the pad's
@@ -147,7 +174,8 @@ export class Landing {
   /** Can the broom come down on to `pad` flying heading a? @returns how far short it stops, or -1. */
   _clearIn(pad, a) {
     const A = APPROACH, L = LAND;
-    const short = this._standoff(pad, a, L.NOSE);
+    const short = pad.kind === 'ground' ? 0 : this._standoff(pad, a, L.NOSE);
+    if (pad.kind === 'ground' && !airClear(this._env(), { ...pad.pos, y: pad.pos.y + A.HOVER }, a)) return -1;
     const dx = Math.sin(a), dz = -Math.cos(a), rx = -dz, rz = dx;
     const hx = pad.pos.x - dx * short, hz = pad.pos.z - dz * short, y0 = pad.pos.y + A.HOVER + A.SETTLE - A.BOOT + 0.2;
     for (let d = 0.5; d <= 13; d += 0.5) {
@@ -160,7 +188,8 @@ export class Landing {
   /** Can it leave `pad` on heading a? @returns how far out from the middle it waits for her, or -1. */
   _clearOut(pad, a) {
     const A = APPROACH, L = LAND;
-    const back = this._standoff(pad, a + Math.PI, L.TAIL);
+    const back = pad.kind === 'ground' ? 0 : this._standoff(pad, a + Math.PI, L.TAIL);
+    if (pad.kind === 'ground' && !airClear(this._env(), { ...pad.pos, y: pad.pos.y + A.HOVER }, a)) return -1;
     const dx = Math.sin(a), dz = -Math.cos(a), rx = -dz, rz = dx;
     const wx = pad.pos.x + dx * back, wz = pad.pos.z + dz * back, y0 = pad.pos.y + A.HOVER - A.BOOT + 0.4;
     for (let d = 0.5; d <= 14; d += 0.5) {
@@ -221,7 +250,8 @@ export class Landing {
 
   /** Start a landing on `pad` from wherever the broom is. @returns false if there is no way in. */
   begin(pad) {
-    if (this.busy) return false;
+    if (this.busy || (pad.kind === 'ground' && !this.game.rider.standing)) return false;
+    this.departPad = null; this.walk = null;
     const w = this.way(pad);
     if (!w) return false;
     const f = this.game.flight, A = APPROACH, L = LAND;
@@ -244,6 +274,17 @@ export class Landing {
       (x, z) => this.floorAt(x, z),
     );
     if (!path) { this.pad = null; return false; }
+    if (pad.kind === 'ground') {
+      // Reject the planner's least-bad fallback rather than lift through an obstruction.
+      const env = this._env(), o = {};
+      if (path.bad > 0.05 || Math.abs(path.at(0, o).y - f.pos.y) > 0.05) { this.pad = null; return false; }
+      const n = Math.max(1, Math.ceil(path.len / 0.2));
+      for (let i = 0; i <= n; i++) {
+        path.at(path.len * i / n, o);
+        if (!airClear(env, o, o.yaw)) { this.pad = null; return false; }
+      }
+    }
+    this.lastFailure = null;
     this.path = path;
     this.s = 0; this.v = Math.max(hs, 4);
     this.yaw = f.yaw; this.pitch = f.pitch; this.roll = f.roll;
@@ -261,6 +302,33 @@ export class Landing {
   /** Get back on and go. */
   takeoff() {
     if (this.state !== 'landed') return false;
+    if (this.pad.kind === 'ground' || this.walk?.moved) {
+      const env = this._env(), pos = this.walk.pos;
+      const support = probeGround(env, pos.x, pos.z, { referenceY: pos.y });
+      if (!support.ok || Math.abs(support.pos.y - pos.y) > 0.04) {
+        this._fail(support.ok ? 'support' : support.code); return false;
+      }
+      if (!bodyClear(env, pos.x, pos.y, pos.z, WALK.height + 0.55)) { this._fail('clearance'); return false; }
+      const anchor = groundAnchor(pos, this.yaw);
+      // Use a private departure anchor to preserve the authored pad and delivery identity.
+      let departure = null;
+      const clear = this._firstClear(this.yaw, (heading) => {
+        if (this._clearOut(anchor, heading) < 0) return -1;
+        const d = this._planDeparture(anchor, this.spot, heading);
+        if (!this._departureClear(d, heading, env)) return -1;
+        departure = d;
+        return 0;
+      });
+      if (!clear) { this._fail('clearance', '当前站位没有安全起飞净空，请走到开阔处'); return false; }
+      this.departPad = anchor;
+      this.dep = departure;
+      this.out = clear.a;
+      this.away.copy(this.spot);
+    }
+    this.lastFailure = null;
+    this.game.chase.stopWalk();
+    if (this.game.input) this.game.input.walking = false;
+    this.game.rider.walkSpeed = 0;
     this._set('mount');
     return true;
   }
@@ -275,6 +343,10 @@ export class Landing {
     }
     r.seat.hop = 0; r.seat.sy = 1; r.seat.calm = 0;
     r.off.on = false; r.off.y = 0; r.off.sy = 1;
+    r.walkSpeed = 0;
+    this.walk = null; this.departPad = null;
+    if (g.input) g.input.walking = false;
+    g.chase.stopWalk();
     if (this.cam) g.chase.release(0.6);
     this.cam = false;
     this.pad = null; this.path = null; this.dep = null;
@@ -284,9 +356,17 @@ export class Landing {
 
   /** Once a step, before the flight model: notice the broom being taken away, a landing broken off. */
   update(dt, ctl) {
+    this.controls = this.game.state === 'play' ? ctl : null;
     if (!this.busy) return;
     const f = this.game.flight;
     if (f.auto !== this.script) { this.abort(); return; }       // placed elsewhere by something else
+    if (this.pad?.kind === 'ground' && ['approach', 'settle', 'dismount'].includes(this.state)) {
+      // Newly streamed buildings can invalidate the previously checked support.
+      const p = this.pad.pos, support = probeGround(this._env(), p.x, p.z, { referenceY: p.y });
+      if (!support.ok || Math.abs(support.pos.y - p.y) > 0.04) {
+        this.abort(); this._fail(support.ok ? 'support' : support.code); return;
+      }
+    }
     if (this.state === 'approach') {
       // a fresh touch of the gust breaks the landing off (not in the last few metres)
       const boost = !!(ctl && ctl.boost);
@@ -328,7 +408,16 @@ export class Landing {
     left = P.len - this.s;
     const o = P.at(this.s, _o);
     // (the plan was laid over a metre-by-metre sounding of what is underneath: never under the real thing)
-    const y = Math.max(o.y, this.floorAt(o.x, o.z) + 0.72);
+    const y = this.pad.kind === 'ground' ? o.y : Math.max(o.y, this.floorAt(o.x, o.z) + 0.72);
+    if (this.pad.kind === 'ground') {
+      const env = this._env(), n = Math.max(1, Math.ceil(Math.hypot(f.pos.x - o.x, f.pos.y - o.y, f.pos.z - o.z) / 0.2));
+      for (let i = 0; i <= n; i++) {
+        const u = i / n, p = { x: lerp(f.pos.x, o.x, u), y: lerp(f.pos.y, o.y, u), z: lerp(f.pos.z, o.z, u) };
+        if (!airClear(env, p, this.yaw + turn(o.yaw - this.yaw) * u)) {
+          this.abort(); this._fail('clearance', '降落航线出现障碍，已停止自动降落'); return;
+        }
+      }
+    }
     this._move(f, o.x, y, o.z, dt);
 
     // heading: along the path. With no standing model to turn in the air, the broom itself squares
@@ -414,19 +503,47 @@ export class Landing {
     if (t >= L.T_TOUCH && this._once('touch')) {
       dustRing(g.fx, S.x, pad.pos.y, S.z, 0.3, 18, sun);
       g.sound?.thump?.(0.7);
-      this.on.touch?.(pad);
+      if (pad.kind !== 'ground') this.on.touch?.(pad);
     }
-    if (t >= L.T_OFF) this._set('landed');
+    if (t >= L.T_OFF) {
+      this._set('landed');
+      if (stand) {
+        this.walk = { pos: { x: S.x, y: pad.pos.y, z: S.z }, moved: false, notice: 0 };
+        this.game.chase.startWalk(this.focus);
+        if (g.input) { g.input.walking = true; g.input.stickX = 0; g.input.stickY = 0; }
+      }
+    }
   }
 
   _wait(dt, f) {
-    this._move(f, this.spot.x, this.pad.pos.y + this.rest, this.spot.z, dt);
-    f.yaw = this.yaw = this.pad.yaw; f.roll = this.roll = 0;
-    f.pitch = this.pitch = this.stand ? 0 : LAND.SIT;
+    const g = this.game, w = this.walk, ctl = this.controls;
+    if (w && this.stand) {
+      const heading = g.chase.lookWalk(ctl?.lookX || 0, ctl?.lookY || 0);
+      const axes = { x: ctl?.walkX || 0, z: ctl?.walkZ || 0 };
+      const previous = w.pos;
+      // An idle authored pad can override the coarse wall grid; walking out cannot.
+      const move = axes.x || axes.z ? moveGround(this._env(), previous, axes, heading, dt, ctl?.walkFast) : null;
+      g.rider.walkSpeed = move ? move.travelled / Math.max(dt, 1e-4) : 0;
+      w.notice = Math.max(0, w.notice - dt);
+      if (move?.blocked && !w.notice) { this._fail(move.blocked.code); w.notice = 1.8; }
+      if (move && move.travelled > 1e-6) {
+        w.pos = move.pos; w.moved = true;
+        const facing = Math.atan2(w.pos.x - previous.x, previous.z - w.pos.z);
+        this.yaw += turn(facing - this.yaw) * (1 - Math.exp(-dt * 14));
+      }
+      this.spot.set(w.pos.x, w.pos.y + this.rest, w.pos.z);
+      this.focus.set(w.pos.x, w.pos.y + 1.15, w.pos.z);
+      this._move(f, this.spot.x, this.spot.y, this.spot.z, dt);
+      f.yaw = this.yaw; f.roll = this.roll = 0; f.pitch = this.pitch = 0;
+    } else {
+      this._move(f, this.spot.x, this.pad.pos.y + this.rest, this.spot.z, dt);
+      f.yaw = this.yaw = this.pad.yaw; f.roll = this.roll = 0;
+      f.pitch = this.pitch = this.stand ? 0 : LAND.SIT;
+    }
   }
 
   _mount(dt, f) {
-    const L = LAND, g = this.game, pad = this.pad, t = this.t, S = this.spot, W = this.away;
+    const L = LAND, g = this.game, pad = this.departPad || this.pad, t = this.t, S = this.spot, W = this.away;
     const stand = this.stand;
     const go = smooth(seg(t, 0.16, 0.56));                  // from her place to where the broom waits
     const up = stand ? 1 : smooth(seg(t, 0.14, 0.44));
@@ -446,14 +563,14 @@ export class Landing {
   }
 
   /** Lay out the way off the pad: up over its edge, out the way she faces, a dip beyond it. */
-  _depart(f) {
-    const pad = this.pad, A = APPROACH, W = this.away, g = this.game;
-    const dx = Math.sin(this.out), dz = -Math.cos(this.out), rx = -dz, rz = dx;
+  _planDeparture(pad, W, heading) {
+    const A = APPROACH;
+    const dx = Math.sin(heading), dz = -Math.cos(heading), rx = -dz, rz = dx;
     const base = pad.pos.y + A.HOVER, N = 44;
     const fl = new Float64Array(N), ys = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const x = W.x + dx * i, z = W.z + dz * i;
-      fl[i] = Math.max(this.floorAt(x, z), this.floorAt(x + rx * 0.7, z + rz * 0.7), this.floorAt(x - rx * 0.7, z - rz * 0.7));
+      fl[i] = Math.max(this._floor(pad, x, z), this._floor(pad, x + rx * 0.7, z + rz * 0.7), this._floor(pad, x - rx * 0.7, z - rz * 0.7));
     }
     // the edge: where the floor falls away from under the platform
     let edge = Math.ceil(pad.radius) + 1;
@@ -470,7 +587,20 @@ export class Landing {
     for (let i = N - 2; i >= 0; i--) if (ys[i] < ys[i + 1] - 0.8) ys[i] = ys[i + 1] - 0.8;
     for (let pass = 0; pass < 2; pass++) for (let i = 1; i < N - 1; i++) ys[i] = Math.max(0.25 * ys[i - 1] + 0.5 * ys[i] + 0.25 * ys[i + 1], Math.min(ys[i], fl[i] + 0.8));
     ys[0] = base;
-    this.dep = { x: W.x, z: W.z, dx, dz, ys, d: 0 };
+    return { x: W.x, z: W.z, dx, dz, ys, d: 0 };
+  }
+
+  _departureClear(D, heading, env) {
+    for (let d = 0; d < D.ys.length - 1; d += 0.2) {
+      const i = Math.floor(d), y = lerp(D.ys[i], D.ys[i + 1], d - i);
+      if (!airClear(env, { x: D.x + D.dx * d, y, z: D.z + D.dz * d }, heading)) return false;
+    }
+    return true;
+  }
+
+  _depart(f) {
+    const pad = this.departPad || this.pad, g = this.game;
+    this.dep = this.dep || this._planDeparture(pad, this.away, this.out);
     this.v = 0;
     this.on.leave?.(pad);
     g.sound?.whoosh?.(0.8, true);
@@ -500,6 +630,7 @@ export class Landing {
       f.speed = Math.max(this.v, SPEEDS.SLOW);
       f.vel.copy(f.fwd).multiplyScalar(f.speed);
       this.pad = null; this.path = null; this.dep = null;
+      this.walk = null; this.departPad = null;
       this._set('fly');
     }
   }
@@ -510,7 +641,8 @@ export class Landing {
     const stand = this.stand && !!r.standing;
     seat.hop = 0; seat.sy = 1; seat.calm = 0;
     off.on = false; off.y = 0; off.sy = 1;
-    const floorY = this.pad ? this.pad.pos.y - g.flight.pos.y : 0;     // the pad's floor, in the rider's frame
+    const footY = this.departPad?.pos.y ?? this.walk?.pos.y ?? this.pad?.pos.y;
+    const floorY = footY === undefined ? 0 : footY - g.flight.pos.y;   // current feet, not the original pad
     if (this.state === 'dismount') {
       // crouch, spring up, fall, land
       const crouch = smooth(seg(t, 0, 0.18)), rise = easeOut(seg(t, 0.18, L.T_SWAP + 0.02)), fall = easeIn(seg(t, L.T_SWAP + 0.02, L.T_TOUCH));

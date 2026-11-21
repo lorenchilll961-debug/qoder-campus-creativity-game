@@ -51,6 +51,7 @@ export class ChaseCamera {
       skip: 1, arc: null, phase: 0,        // see circle()
       block: { cut: 1, lift: 0 },
     };
+    this.walkView = { on: false, yaw: 0, pitch: 0 };
     this._block = { cut: 1, lift: 0 };
     this._cp = new THREE.Vector3();
     this._pc = new THREE.Vector3();
@@ -97,10 +98,30 @@ export class ChaseCamera {
     c.on = true;
   }
 
+  /** Keep a camera-relative heading independent of the walking character's facing. */
+  startWalk(focus) {
+    const p = this.camera.position, w = this.walkView;
+    w.yaw = Math.hypot(p.x - focus.x, p.z - focus.z) > 0.1
+      ? Math.atan2(focus.x - p.x, p.z - focus.z) : this.flight.yaw;
+    w.pitch = 0; w.on = true;
+    this.circle(focus, { dist: 5.2, height: 1.5, spin: 0, fov: 58, lookY: 0, skip: 0.15, seconds: 0.4 });
+    return w.yaw;
+  }
+
+  lookWalk(dx = 0, dy = 0) {
+    const w = this.walkView;
+    w.yaw += dx;
+    w.pitch = Math.max(-0.35, Math.min(0.75, w.pitch + dy));
+    return w.yaw;
+  }
+
+  stopWalk() { this.walkView.on = false; }
+
   /** Give the view back to the chase camera over `seconds`. */
   release(seconds = 1.2) {
     const c = this.cine;
     c.on = false;
+    this.stopWalk();
     c.tout = Math.max(seconds, 0.05);
     // (while she stood by a wall the chase camera, unseen, was pressed up against it: let it out)
     this._block.cut = Math.max(this._block.cut, 0.7);
@@ -200,7 +221,11 @@ export class ChaseCamera {
     const c = this.cine, cam = this.camera, F = c.focus;
     const pc = this._pc.copy(cam.position), qc = this._qc.copy(cam.quaternion);
     c.k = Math.min(1, Math.max(0, c.k + (c.on ? dt / c.tin : -dt / c.tout)));
-    if (c.on) {
+    if (c.on && this.walkView.on) {
+      c.az = this.walkView.yaw + Math.PI;
+      c.dist = damp(c.dist, 5.2 * Math.cos(this.walkView.pitch), 6, dt);
+      c.h = damp(c.h, 1.5 + 5.2 * Math.sin(this.walkView.pitch), 6, dt);
+    } else if (c.on) {
       // drift round, breathing in and out and up and down so the view keeps changing
       c.t += dt;
       if (c.arc) {
