@@ -13,6 +13,20 @@ const SHADOW_SIZE = 1024;
 const SHADOW_EXTENT = 3.4; // half-width of the shadow box in metres
 const STAND_HEIGHT = 2.05; // boots to hat tip, if the standing model does not say how big it is
 
+// The single-mesh model has no skeleton; isolate its boots without bending the held broom.
+export function standLegWeight(x, y, z, info = {}, height = info.height || 1.6087) {
+  const feet = info.feet || { left: [-0.072 * height, 0, 0], right: [0.072 * height, 0, 0] };
+  const foot = x < 0 ? feet.left : feet.right;
+  const fy = (y - foot[1]) / height;
+  if (fy < -0.01 || fy > 0.35) return 0;
+  if (info.broomBase && Math.hypot(x - info.broomBase[0], z - info.broomBase[2]) < 0.115 * height) return 0;
+  const smooth = (v) => { const t = Math.max(0, Math.min(1, v)); return t * t * (3 - 2 * t); };
+  const width = 1 - smooth((Math.abs(x - foot[0]) / height - 0.048) / 0.028);
+  const depth = 1 - smooth((Math.abs(z - foot[2]) / height - 0.075) / 0.035);
+  const hip = 1 - smooth((fy - 0.18) / 0.17);
+  return (x < 0 ? -1 : 1) * width * depth * hip;
+}
+
 export class Rider {
   static async load(renderer, base = './assets/models') {
     const [gltf, info] = await Promise.all([
@@ -42,6 +56,8 @@ export class Rider {
     // dismounted: show the standing model with its feet at y (m, in the rider's frame), squashed by sy
     this.off = { on: false, y: 0, sy: 1 };
     this.standing = null;                // { root, model, height } once the standing model is in
+    this.walkSpeed = 0;
+    this.walkPhase = 0;
     this.meshes = [];
     model.traverse((o) => {
       if (!o.isMesh) return;
@@ -198,8 +214,58 @@ export class Rider {
       this._patch(m, !!o.geometry.attributes._wind, u);
     });
     this.group.add(root);
-    this.standing = { root, model, height, uniforms: u };
+    this.standing = { root, model, height, uniforms: u, legs: this._standLegs(model, info, height / model.scale.y) };
     return this.standing;
+  }
+
+  _standLegs(model, info, height) {
+    model.updateWorldMatrix(true, true);
+    const inverse = model.matrixWorld.clone().invert(), v = new THREE.Vector3(), normal = new THREE.Vector3(), legs = [];
+    model.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      mesh.geometry = mesh.geometry.clone();
+      const geometry = mesh.geometry, p = geometry.attributes.position, n = geometry.attributes.normal;
+      p.setUsage(THREE.DynamicDrawUsage);
+      n?.setUsage(THREE.DynamicDrawUsage);
+      const local = inverse.clone().multiply(mesh.matrixWorld), back = local.clone().invert();
+      const normalLocal = new THREE.Matrix3().getNormalMatrix(local), normalBack = normalLocal.clone().invert();
+      const vertices = [];
+      for (let i = 0; i < p.count; i++) {
+        v.fromBufferAttribute(p, i).applyMatrix4(local);
+        const weight = standLegWeight(v.x, v.y, v.z, info, height);
+        if (Math.abs(weight) < 0.001) continue;
+        if (n) normal.fromBufferAttribute(n, i).applyMatrix3(normalLocal).normalize();
+        vertices.push({ i, weight, y: v.y - height * 0.35, z: v.z, nx: normal.x, ny: normal.y, nz: normal.z });
+      }
+      legs.push({ p, n, base: p.array.slice(), normals: n?.array.slice(), back: back.elements, normalBack, vertices, height, active: false });
+    });
+    return legs;
+  }
+
+  _gait(S, amplitude, phase) {
+    const normal = this._v;
+    for (const leg of S.legs) {
+      if (!amplitude && !leg.active) continue;
+      const { p, n, base, normals, back: e } = leg;
+      for (const v of leg.vertices) {
+        const j = v.i * 3, w = Math.abs(v.weight), swing = Math.sin(phase) * Math.sign(v.weight);
+        const a = swing * 0.22 * amplitude, c = Math.cos(a), s = Math.sin(a);
+        const dy = ((c - 1) * v.y - s * v.z + Math.max(0, swing) * 0.012 * leg.height * amplitude) * w;
+        const dz = (s * v.y + (c - 1) * v.z) * w;
+        p.setXYZ(v.i, base[j] + e[4] * dy + e[8] * dz, base[j + 1] + e[5] * dy + e[9] * dz, base[j + 2] + e[6] * dy + e[10] * dz);
+        if (n) {
+          if (!amplitude) n.setXYZ(v.i, normals[j], normals[j + 1], normals[j + 2]);
+          else {
+            normal.set(v.nx, v.ny + ((c - 1) * v.ny - s * v.nz) * w, v.nz + (s * v.ny + (c - 1) * v.nz) * w)
+              .applyMatrix3(leg.normalBack).normalize();
+            n.setXYZ(v.i, normal.x, normal.y, normal.z);
+          }
+        }
+      }
+      p.needsUpdate = true;
+      if (n) n.needsUpdate = true;
+      leg.active = amplitude > 0;
+    }
   }
 
   /** @param flight Flight state. */
@@ -224,14 +290,20 @@ export class Rider {
     const S = this.standing, o = this.off;
     if (S) {
       const on = o.on;
+      const walking = on && this.walkSpeed > 0.01;
+      const gait = walking ? Math.min(1, this.walkSpeed / 2.2) : 0;
+      if (walking) this.walkPhase = (this.walkPhase + dt * this.walkSpeed * 5.2) % (Math.PI * 2);
+      else this.walkPhase = 0;
+      this._gait(S, gait, this.walkPhase);
       S.root.visible = on;
       this.tilt.visible = !on;
       if (on) {
         // a little life while she waits: breathing, and a slow shift of her weight
         const sy = o.sy * (1 + 0.006 * Math.sin(time * 1.7)), w = 1 / Math.sqrt(sy);
-        S.root.position.set(0, o.y, 0);
+        S.root.position.set(0, o.y + Math.abs(Math.sin(this.walkPhase)) * 0.022 * gait, 0);
         S.root.scale.set(w, sy, w);
-        S.root.rotation.set(Math.sin(time * 0.53 + 0.4) * 0.008, 0, Math.sin(time * 0.71) * 0.012);
+        S.root.rotation.set(Math.sin(time * 0.53 + 0.4) * 0.008 + gait * 0.035, 0,
+          Math.sin(time * 0.71) * 0.012 + Math.sin(this.walkPhase) * 0.024 * gait);
         S.uniforms.uRiderWind.value = 0.42 + 0.22 * Math.sin(time * 0.6) * Math.sin(time * 0.23 + 1.0);
         S.uniforms.uLantern.value.set(Math.sin(time * 1.3) * 0.05, Math.sin(time * 1.1 + 0.7) * 0.04);
       }
