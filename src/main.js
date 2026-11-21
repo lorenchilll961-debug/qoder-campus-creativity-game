@@ -22,6 +22,9 @@ import { Town } from './world/town.js';
 import { Places } from './world/places.js';
 import { Sound } from './audio/audio.js';
 import { Gameplay } from './game/index.js';
+import { Seasons } from './seasons/index.js';
+import { SEASONS } from './seasons/cycle.js';
+import { SeasonWeather } from './seasons/weather.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -80,6 +83,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 async function boot() {
   $('title').classList.add('loading');
   applyEnv('afternoon');
+  game.seasons = new Seasons($('seasonPanel'), game);
   const noise = makeNoiseTexture();
   U.uNoiseTex.value = noise.texture;
   game.noise = noise;
@@ -136,7 +140,7 @@ async function boot() {
   world.add(places.group);
   pipeline.overlay.add(places.overlay);
 
-  setLoad(0.9, '正在唤醒扫帚……');
+  setLoad(0.9, '正在唤醒魔毯……');
   const rider = (game.rider = await riderLoad);
   pipeline.overlay.add(rider.group, rider.lights);
   pipeline.overlay.environment = sky.bakeEnvironment(renderer);
@@ -168,6 +172,8 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
+  await Promise.all([game.gameplay.standReady, game.gameplay.attachUi()]);
+  game.weather = new SeasonWeather(game);
 
   resize();
   setLoad(1);
@@ -192,8 +198,11 @@ function start() {
   game.sound.start();
   $('title').classList.add('gone');
   $('hud').hidden = false;
+  canvas.tabIndex = -1;
+  canvas.focus({ preventScroll: true });
   // (where the lock is refused - an embedded frame, say - the keyboard still flies the broom)
-  canvas.requestPointerLock?.()?.catch?.(() => {});
+  game.gameplay.courier.start();
+  if (!game.paused) canvas.requestPointerLock?.()?.catch?.(() => {});
 }
 
 // ---------------------------------------------------------------------------------- loop
@@ -228,6 +237,7 @@ function frame(now) {
   last = now;
   autoScale(raw);
   if (!game.paused) step(dt);
+  else if (game.gameplay.courier.dialogue?.modal.isOpen) game.gameplay.courier.npcs?.animateDialogue(dt);
   render(dt);
 }
 
@@ -263,9 +273,11 @@ function autopilot() {
 const _bl = new THREE.Vector3(), _br = new THREE.Vector3();
 const _sp = [0, 0, 0, 0];
 function advance(dt, ctl) {
+  game.seasons.update(dt);
   const t = game.time;
   const { flight, rider, chase, terrain, wake, fx, vortex } = game;
   game.gameplay.update(dt, ctl);             // may take the broom over (flight.auto) to land it
+  if (game.paused) return;
   flight.update(dt, ctl, t);
   rider.update(dt, t, flight, terrain);
   if (flight.touchdown > 0) fx.slam(flight, flight.touchdown, rider.sunVis);
@@ -288,10 +300,9 @@ function advance(dt, ctl) {
     game.fov = r[5] || 60;
   }
   fx.update(dt, t, flight, camera, rider.sunVis, pipeline.size, pipeline.reversed);
-  // trails off the two edges of the bristle head
   rider.group.updateMatrixWorld(true);
-  _bl.set(-0.17, -0.02, 1.16).applyMatrix4(rider.group.matrixWorld);
-  _br.set(0.17, -0.02, 1.16).applyMatrix4(rider.group.matrixWorld);
+  _bl.set(-0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
+  _br.set(0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
   const trail = THREE.MathUtils.clamp((flight.speed - 34) / 26, 0, 1) * 0.42 + flight.boosting * 0.5;
   fx.updateRibbons(dt, _bl, _br, camera.position, trail);
   game.river.update(dt, fx.sprites, camera.position, fx.sunTint(rider.sunVis));
@@ -326,7 +337,10 @@ function step(dt) {
     if (input.take('KeyC')) toast(`视角 · ${chase.next()}`);
     if (input.take('KeyI')) { input.invert = !input.invert; toast(input.invert ? '俯仰已反转' : '俯仰已复原'); }
     if (input.take('KeyP')) $('hud').classList.toggle('quiet');
-    if (input.take('KeyM')) toast(game.sound.toggleMute() ? '声音已静' : '声音已开');
+    if (input.take('KeyN')) toast(game.sound.toggleMute() ? '声音已静' : '声音已开');
+    for (let i = 0; i < SEASONS.length; i++) {
+      if (input.take(`Digit${i + 1}`)) game.seasons.select(SEASONS[i].id);
+    }
   }
   advance(dt, game.override || (game.state === 'play' ? input : autopilot()));
   applyFov();
@@ -340,6 +354,7 @@ function render(dt) {
   if (!pipeline.sceneRT) { resize(); if (!pipeline.sceneRT) return; }
   camera.updateMatrixWorld();
   U.uCamPos.value.copy(camera.position);
+  game.weather.prepare(camera, pipeline.size, pipeline.reversed);
   game.rider.renderShadow(pipeline.reversed);
   game.water.renderReflection(camera, pipeline.size);
   game.terrain.select(game.terrain.mainView, camera);

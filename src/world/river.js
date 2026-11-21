@@ -68,7 +68,7 @@ export class River {
     g.setIndex(idx);
     const ripple = makeWaveNormalTexture();
     const uniforms = {
-      ...shared(...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uLightTex', 'uWorld', 'uNoiseTex', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn'),
+      ...shared(...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uLightTex', 'uWorld', 'uNoiseTex', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonIce'),
       uRipple: { value: ripple },
       uCloudTex: sky.cloudTex,
       uCloudOn: sky.cloudOn,
@@ -214,6 +214,7 @@ varying vec4 vFlow;
 varying vec2 vDir;
 uniform float uTime;
 uniform sampler2D uRipple;
+uniform float uSeasonIce;
 uniform sampler2D uWakeTex;
 uniform vec4 uWake;
 ${NOISE}
@@ -232,14 +233,25 @@ void main(){
   depth = max(depth, 0.0);
   float u = vFlow.x, s = vFlow.y, slope = vFlow.z, w = vFlow.w;
   vec3 V = normalize(uCamPos - P);
-  // the current is quicker mid-stream and on the steeps
-  float speed = (1.3 + 9.0 * slope) * (1.0 - 0.45 * u * u);
+  // Freeze the banks first. The irregular front is world-anchored, never advected with flow.
+  float ice = 0.0;
+  float iceAmount = clamp(uSeasonIce, 0.0, 1.0);
+  if (iceAmount > 0.0){
+    float front = (1.0 - abs(u)) * 0.82 + (vnoise(P.xz * 1.7) - 0.5) * 0.12;
+    ice = smoothstep(front - 0.04, front + 0.12, iceAmount) * smoothstep(0.0, 0.08, iceAmount);
+  }
+  // the current is quicker mid-stream and on the steeps; under ice it almost stops
+  float speed = (1.3 + 9.0 * slope) * (1.0 - 0.45 * u * u) * (1.0 - 0.98 * ice);
   vec2 f = vec2(u * w, s);
   vec4 r1 = texture(uRipple, f / vec2(6.0, 11.0) + vec2(0.0, -uTime * speed / 11.0));
   vec4 r2 = texture(uRipple, f / vec2(2.6, 4.6) + vec2(0.37, -uTime * speed * 1.3 / 4.6));
   vec2 rip = (r1.xy - 0.5) * 0.7 + (r2.xy - 0.5) * 0.5;
   vec2 across = vec2(-vDir.y, vDir.x);
   vec2 nxz = (across * rip.x + vDir * rip.y) * (0.28 + 1.4 * slope);
+  if (iceAmount > 0.0){
+    vec2 iceN = (texture(uRipple, P.xz / 7.0).xy - 0.5) * 0.075;
+    nxz = mix(nxz, iceN, ice);
+  }
   vec3 N = normalize(vec3(nxz.x, 1.0, nxz.y));
 
   vec4 light = texture(uLightTex, worldUV(P.xz));
@@ -281,7 +293,31 @@ void main(){
     foam = max(foam, smoothstep(cut, cut + 0.16, streak) * (1.0 - smoothstep(0.80, 1.0, ageN)) * step(0.003, wk.a));
   }
   vec3 foamCol = vec3(0.92, 0.95, 0.97) * (uSunColor * 0.30 * (0.25 + 0.75 * sun) + uAmbSky * 0.62);
-  col = mix(col, foamCol, saturate(foam));
+  col = mix(col, foamCol, saturate(foam) * (1.0 - ice));
+  if (iceAmount > 0.0){
+    // Fixed Voronoi seams and grain: neither cracks nor the ice skin flow with the current.
+    vec2 ip = P.xz * 0.42, cell = floor(ip), local = fract(ip);
+    float nearest = 9.0, second = 9.0;
+    for (int iz = -1; iz <= 1; iz++) for (int ix = -1; ix <= 1; ix++){
+      vec2 id = vec2(float(ix), float(iz));
+      vec2 delta = id + 0.18 + hash22(cell + id) * 0.64 - local;
+      float d2 = dot(delta, delta);
+      if (d2 < nearest){ second = nearest; nearest = d2; }
+      else second = min(second, d2);
+    }
+    float seam = second - nearest;
+    float aa = max(fwidth(seam), 0.003);
+    float crack = 1.0 - smoothstep(0.016, 0.016 + aa, seam);
+    float rim = 1.0 - smoothstep(0.04, 0.04 + aa, seam);
+    float grain = ntex(P.xz * 19.0).r;
+    vec3 iceAlb = mix(vec3(0.20, 0.35, 0.43), vec3(0.47, 0.63, 0.71), grain * 0.6 + iceAmount * 0.4);
+    iceAlb = mix(iceAlb, vec3(0.61, 0.77, 0.83), rim * 0.35);
+    iceAlb = mix(iceAlb, vec3(0.075, 0.17, 0.23), crack * 0.60);
+    vec3 iceCol = iceAlb * (uSunColor * saturate(dot(N, uSunDir)) * sun * 0.48 + uAmbSky * 0.78);
+    iceCol += sky * (0.045 + 0.09 * pow(1.0 - saturate(dot(N, V)), 4.0));
+    iceCol += uSunColor * sun * pow(saturate(dot(N, H)), 32.0) * 0.13;
+    col = mix(col, iceCol, ice);
+  }
   col = applyAtmosphere(col, P);
   gl_FragColor = vec4(col, 1.0);
 }

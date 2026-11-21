@@ -145,7 +145,7 @@ export function planApproach(start, end, floorAt) {
       } else y = yEnd + left * A.GLIDE;
       nom[i] = y;
       // what is under this stretch (the broom has some width; the final is the pad's own corridor)
-      const onFinal = s > g.len - 1, lat = onFinal ? 0.6 : 1.3;
+      const onFinal = s > g.len - 1, lat = onFinal ? 1.0 : 1.3;
       const rx = Math.cos(o.yaw) * lat, rz = Math.sin(o.yaw) * lat;
       const fl = Math.max(floorAt(o.x, o.z), floorAt(o.x + rx, o.z + rz), floorAt(o.x - rx, o.z - rz));
       const clr = onFinal ? A.BOOT : Math.min(A.CLEAR, c0 + 0.5 * s, A.BOOT + 0.35 * left);

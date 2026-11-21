@@ -1,0 +1,44 @@
+配送系统参考记录（2026-11-21）
+
+本项目配送状态、交互、对话及地图由项目独立实现；未复制下列仓库的源代码、对白、音频或模型，未安装其运行时依赖。
+
+1. https://github.com/Glowin/messager
+   Commit: e8b1fbbe6afc7874f3a4feac66f02519261b11a3
+   研究文件: src/quest.ts, src/interaction.ts, src/npc.ts,
+   src/data/quests.ts, src/ui/dialogue.ts, src/ui/hud.ts, src/intro.ts.
+   借鉴: 单笔在途任务、近距离 NPC 交互、目标 HUD、开场对话。
+   README 声称 MIT，但此版本没有完整 LICENSE 或代码版权行。
+   README 原署名: "Original game: Messenger by Abeto — this is a non-commercial study/clone."
+   此署名不是 Abeto 的复制授权；因此没有复用该仓库代码或素材。
+
+2. https://github.com/luzhenqian/overworld
+   Commit: 2fa9266542de81ef44bd6b858b6f8a825c1dc591
+   借鉴: 无渲染任务状态、事件驱动引导、存档；不引入 React / Zustand。
+   Copyright (c) 2026 NoahLu
+
+3. https://github.com/anvaka/three.map.control
+   Commit: be77454f4e1c051e1ff474247a687a95b929dcb4
+   借鉴: 光标锚定缩放、拖拽平移；不接管游戏透视相机。
+   Copyright (c) 2016-2020 Andrei Kashcha
+
+以上第 2、3 项原始 MIT 许可条款保留如下（分别适用于各自版权人）：
+
+The MIT License (MIT)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

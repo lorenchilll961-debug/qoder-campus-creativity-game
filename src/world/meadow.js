@@ -9,7 +9,8 @@ import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, MEADOW, WIN
 import { SKY_UNIFORMS } from './sky.js';
 
 const SHARED = [...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uWorld', 'uNoiseTex', 'uWakeTex', 'uWake', 'uWind', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uRider', 'uStripTex',
-  'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1'];
+  'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
+  'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonWither', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather', 'uPhenology'];
 
 // ----------------------------------------------------------------------------------------
 // shell definitions. fade = [in0, in1, out0, out1] (metres from camera)
@@ -116,6 +117,8 @@ uniform float uTime;
 uniform float uSegs;
 uniform vec2 uBlade;    // width, height
 uniform float uLeanK;
+uniform vec4 uClimate;
+uniform vec4 uPhenology;
 ${NOISE}
 ${NOISE_TEX}
 ${TERRAIN_LOOKUP}
@@ -145,8 +148,11 @@ void main(){
   float d = distance(root, uCamPos);
   float cover = splat.a;
   // ragged edges: blades thin out before the sward ends
-  float keep = step(rnd.z, cover * 1.25) * smoothstep(0.02, 0.5, cover);
-  float fade = lodFade(d) * keep;
+  // Climate is opt-in. Cold/early growth reads as short, open shoots, not flowers.
+  float growth = smoothstep(2.0, 24.0, uClimate.y) * (0.70 + 0.30 * clamp(uPhenology.x, 0.0, 1.0));
+  float density = mix(1.0, 0.68 + 0.36 * growth, clamp(uClimate.x, 0.0, 1.0)) * mix(1.0, 0.82, uSeasonWither);
+  float keep = step(rnd.z, cover * 1.25 * density) * smoothstep(0.02, 0.5, cover);
+  float fade = lodFade(d) * keep * (1.0 - uSeasonSnow);
   // nothing to draw here (bare ground, or outside this shell): skip the wind and wake lookups
   if (fade <= 0.0){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
@@ -156,6 +162,9 @@ void main(){
   float hgt = uBlade.y * mix(0.50, 1.30, rnd.w) * mix(0.72, 1.28, cl.x) * mix(0.86, 1.22, wet) * (0.55 + 0.45 * cover);
   // flowers shade out the grass a little so the heads stand proud
   hgt *= 1.0 - 0.22 * splat.r;
+  hgt *= mix(1.0, 0.56 + 0.56 * growth, clamp(uClimate.x, 0.0, 1.0));
+  // dead winter sward is down to stubble, so the ground's straw shows between the blades
+  hgt *= mix(1.0, 0.55, uSeasonWither);
   float wid = uBlade.x * mix(0.7, 1.25, rnd.x);
 
   // ---- wind + wake
@@ -163,7 +172,7 @@ void main(){
   vec2 wdir = uWind.xy;
   float ang = (rnd.y * 0.55 + cl.y) * 6.2831853;
   vec2 rdir = vec2(cos(ang), sin(ang));
-  float flutter = sin(uTime * (3.4 + rnd.x * 3.1) + rnd.y * 6.2831) * (0.035 + 0.11 * gust);
+  float flutter = sin(uTime * (3.4 + rnd.x * 3.1) + rnd.y * 6.2831) * (0.035 + 0.11 * gust) * uWind.z;
   vec2 lean = rdir * (0.16 + 0.26 * cl.z) + wdir * (0.10 + 0.82 * gust) * uWind.z * uLeanK + vec2(-wdir.y, wdir.x) * flutter;
   vec4 wk = wakeAt(xz);
   // the wake drags blades along its push and whips them at the rider's passing speed
@@ -198,7 +207,7 @@ void main(){
   vNormal = n;
   vInfo = vec4(t, rnd.w, gust, light.r);
   // on cliff ledges the sward is short, wind-burnt and darker (matches the far-field ground)
-  vTint = mix(meadowTint(xz, wet), vec3(0.135, 0.170, 0.060), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
+  vTint = mix(meadowTint(xz, wet), mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.41, 0.255, 0.070), uSeasonWither), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
   vAux = vec2(light.g, min(wk.z, 1.0));
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }
@@ -208,6 +217,9 @@ const GRASS_FRAG = /* glsl */`
 precision highp float;
 uniform float uTime;
 uniform float uRoot;
+uniform float uSeasonSnow;
+uniform float uSeasonWither;
+uniform vec4 uSurfaceWeather;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec4 vInfo;
@@ -226,23 +238,41 @@ void main(){
   // colour runs from shaded thatch at the root to sun-bleached tips. In the sparse far shells a
   // blade stands in for a whole tuft, so it carries the canopy colour nearly root to tip.
   vec3 rootC = vTint * mix(1.05, 0.42, uRoot);
-  vec3 tipC = vTint * mix(1.30, 1.62, uRoot) + vec3(0.050, 0.060, 0.004) * uRoot;
+  vec3 tipC = vTint * mix(1.30, 1.62, uRoot) + vec3(0.050, 0.060, 0.004) * uRoot * mix(1.0, 0.25, uSeasonWither);
   vec3 alb = mix(rootC, tipC, pow(t, 1.25)) * mix(0.84, 1.16, vInfo.y);
-  alb = mix(alb, vec3(0.50, 0.46, 0.20), smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
+  vec3 straw = vec3(0.50, 0.46, 0.20) * mix(vec3(1.0), vec3(1.18, 0.92, 0.55), uSeasonWither);
+  alb = mix(alb, straw, smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
+  alb = mix(alb, alb * vec3(1.14, 1.03, 0.70), uSeasonWither);   // dead blades have no green left to cool
 
+  // Only scattered upper tips carry crystalline rime; the blade remains green/brown below it.
+  float frostTip = uSurfaceWeather.z * smoothstep(0.76, 0.98, t) * smoothstep(0.58, 0.84, vInfo.y);
+  alb = mix(alb, vec3(0.65, 0.76, 0.83), frostTip * 0.52);
+  alb *= 1.0 - uSurfaceWeather.x * 0.16;
+  alb = mix(alb, vec3(0.94, 0.97, 1.0), uSeasonSnow);
   float sh = vInfo.w * cloudShadow(vWorld.xz, uTime) * riderShadow(vWorld);
   float ndl = dot(N, uSunDir);
   float dif = saturate(ndl * 0.55 + 0.45);
   // light pouring through the blades when you look toward the sun
   float back = pow(saturate(dot(V, -uSunDir) * 0.5 + 0.5), 4.0);
-  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t);
+  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t) * (1.0 - uSeasonSnow) * mix(1.0, 0.35, uSeasonWither);
   float ao = mix(mix(0.85, 0.24, uRoot), 1.0, smoothstep(0.0, 0.75, t)) * vAux.x;
   vec3 col = alb * (uSunColor * dif * sh * mix(mix(0.95, 0.55, uRoot), 1.0, t)) + trans * uSunColor * sh * 0.33;
   col += alb * mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * ao;
   // glossy sheen that rides the gust fronts
   vec3 H = normalize(uSunDir + V);
   float spec = pow(saturate(dot(N, H)), 26.0) * (0.10 + 0.34 * vInfo.z) * smoothstep(0.15, 0.7, t);
-  col += uSunColor * spec * sh * 0.22;
+  col += uSunColor * spec * sh * 0.22 * mix(1.0, 0.2, uSeasonWither);
+  if (uSurfaceWeather.y > 0.0 || uSurfaceWeather.z > 0.0){
+    // Isolated beads on different points of different blades; no white dew overlay.
+    float dropT = 0.77 + 0.19 * fract(vInfo.y * 37.13);
+    float width = max(fwidth(t), 0.012);
+    float bead = 1.0 - smoothstep(0.015, 0.015 + width, abs(t - dropT));
+    bead *= step(0.62, fract(vInfo.y * 91.7));
+    float close = 1.0 - smoothstep(12.0, 42.0, distance(vWorld, uCamPos));
+    float sparkle = pow(saturate(dot(N, H)), 48.0);
+    col += uSunColor * sh * sparkle * close * (1.0 - uSeasonSnow)
+      * (uSurfaceWeather.y * bead * 1.8 + frostTip * 0.26);
+  }
   col = applyAtmosphere(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -297,7 +327,7 @@ void main(){
   float want = min(uField.x * pow(dn, -1.5) / uShell.x, 1.0);
   float share = smoothstep(uShell.y, uShell.z, d) * (1.0 - smoothstep(uShell.w * 0.85, uShell.w, d));
   float thr = want * share;
-  float fade = smoothstep(0.0, 0.3 * thr + 1e-5, thr - rank) * keep;
+  float fade = smoothstep(0.0, 0.3 * thr + 1e-5, thr - rank) * keep * sqrt(uSeasonBloom);
   // most candidates do not bloom at any one moment: skip the rest of the work for those
   if (fade <= 0.0){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   // those that remain grow with distance, so the cover - and the colour - holds
@@ -315,7 +345,7 @@ void main(){
   // species silhouettes
   vec4 shp = flowerShape(species);
   float count = shp.x, eye = shp.y;
-  float eyeDark = (species >= SP4 && rnd.z < 0.66) ? 1.0 : 0.0;
+  float eyeDark = ((species >= SP4 && rnd.z < 0.66) ? 1.0 : 0.0) * (1.0 - uSeasonGoldBloom);
   float headR = uSize * mix(0.052, 0.080, rnd.w) * shp.z;
   float stemH = mix(0.58, 1.04, rnd.x) * shp.w * (0.7 + 0.3 * splat.a);
   // ---- the wake has been here: the map says what share of the petals it took. They come off one
@@ -330,7 +360,7 @@ void main(){
   // ---- wind + wake: stems sway, heads nod
   float gust = windGust(xz, uTime);
   vec2 wdir = uWind.xy;
-  float sway = sin(uTime * (2.3 + rnd.y * 1.9) + rnd.x * 6.2831) * (0.05 + 0.11 * gust);
+  float sway = sin(uTime * (2.3 + rnd.y * 1.9) + rnd.x * 6.2831) * (0.05 + 0.11 * gust) * uWind.z;
   float ang = rnd.y * 6.2831853;
   vec2 lean = vec2(cos(ang), sin(ang)) * 0.13 + wdir * (0.05 + 0.42 * gust) * uWind.z + vec2(-wdir.y, wdir.x) * sway;
   vec4 wk = wakeAt(xz);

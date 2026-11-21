@@ -48,6 +48,9 @@ uniform vec3 uAmbSky;
 uniform vec3 uAmbGround;
 uniform vec4 uFog;
 uniform vec3 uCamPos;
+// Declared here only: cloud lookups inherit these through ATMOSPHERE.
+uniform vec4 uClimate;       // strength, temperature (C), daylight (hours), heat
+uniform vec4 uWeather;       // rain, cloud, fog, flash
 
 // Clear-sky radiance for a view direction (no sun disc, no clouds).
 vec3 skyBase(vec3 d){
@@ -115,8 +118,40 @@ vec3 terrainN(vec2 xz, float lod){
 }
 `;
 
+export const SEASON = /* glsl */`
+uniform vec3 uSeasonGrass;
+uniform vec3 uSeasonLeaves;
+uniform float uSeasonBloom;
+uniform float uSeasonSnow;
+uniform float uSeasonBare;
+float seasonSnowAt(vec3 p, float up){
+  return uSeasonSnow * smoothstep(0.35, 0.72, up) * smoothstep(0.3, 1.8, p.y);
+}
+`;
+
 /** The meadow palette: shared by the terrain, the grass blades and the far-field flower tint. */
 export const MEADOW = /* glsl */`
+${SEASON}
+uniform float uSeasonPastel;
+uniform float uSeasonGoldBloom;
+uniform float uSeasonWither;
+// Dead sward left from the cold season: a deeper ochre than autumn's gold, streaked with dry patches, no green in it.
+vec3 seasonDeadSward(vec2 xz){
+  float a = vnoise(xz * 0.0093 + 4.0);
+  float b = vnoise(xz * 0.041 - 2.0);
+  float streak = smoothstep(0.24, 0.80, a * 0.55 + b * 0.45);
+  return mix(vec3(0.440, 0.255, 0.050), vec3(0.870, 0.600, 0.115), streak);
+}
+vec3 seasonGoldPetal(vec3 color){
+  float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 gold = mix(vec3(0.92, 0.43, 0.025), vec3(1.0, 0.85, 0.16), lightness);
+  return mix(color, gold, uSeasonGoldBloom);
+}
+vec3 seasonPetal(vec3 color){
+  float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 pastel = mix(vec3(0.98, 0.46, 0.67), vec3(1.0, 0.96, 0.93), lightness);
+  return seasonGoldPetal(mix(color, pastel, uSeasonPastel));
+}
 // Slow colour drift across the island: emerald hollows, sun-bleached crests.
 vec3 meadowTint(vec2 xz, float wet){
   float a = vnoise(xz * 0.0031 + 11.0);
@@ -128,7 +163,8 @@ vec3 meadowTint(vec2 xz, float wet){
   vec3 col = mix(lush, fresh, smoothstep(0.22, 0.78, a * 0.6 + b * 0.4));
   col = mix(col, dry, smoothstep(0.38, 0.80, b * 0.5 + c * 0.5) * (1.0 - wet) * 0.85);
   col = mix(col, lush * 0.92, wet * 0.65);
-  return col;
+  col *= uSeasonGrass;
+  return mix(col, seasonDeadSward(xz), uSeasonWither);
 }
 
 // Flower species palette. s = species field (0..1), r = per-flower random.
@@ -153,15 +189,18 @@ vec3 flowerPetal(float s, float r){
   } else {
     c = r < 0.66 ? red : (r < 0.84 ? orange : (r < 0.93 ? pinkA : white));
   }
-  return c;
+  return seasonPetal(c);
 }
 // species silhouette: x = petal count, y = eye size, z = head size, w = stem height
 vec4 flowerShape(float s){
-  if (s < SP1) return vec4(8.0, 0.24, 1.12, 1.06);
-  if (s < SP2) return vec4(14.0, 0.36, 0.84, 0.80);
-  if (s < SP3) return vec4(6.0, 0.20, 0.80, 0.92);
-  if (s < SP4) return vec4(5.0, 0.26, 0.74, 0.72);
-  return vec4(5.0, 0.30, 1.10, 0.90);
+  vec4 shape;
+  if (s < SP1) shape = vec4(8.0, 0.24, 1.12, 1.06);
+  else if (s < SP2) shape = vec4(14.0, 0.36, 0.84, 0.80);
+  else if (s < SP3) shape = vec4(6.0, 0.20, 0.80, 0.92);
+  else if (s < SP4) shape = vec4(5.0, 0.26, 0.74, 0.72);
+  else shape = vec4(5.0, 0.30, 1.10, 0.90);
+  // Narrow, many-petalled autumn heads, rather than yellow-painted summer poppies.
+  return mix(shape, vec4(18.0, 0.18, 0.92, 0.78), uSeasonGoldBloom);
 }
 // Average colour of a drift, for the far-field tint.
 vec3 flowerMean(float s){
@@ -174,7 +213,7 @@ vec3 flowerMean(float s){
   c = mix(c, lav, smoothstep(SP2 - 0.03, SP2 + 0.03, s));
   c = mix(c, gold, smoothstep(SP3 - 0.03, SP3 + 0.03, s));
   c = mix(c, poppy, smoothstep(SP4 - 0.03, SP4 + 0.03, s));
-  return c;
+  return seasonPetal(c);
 }
 `;
 

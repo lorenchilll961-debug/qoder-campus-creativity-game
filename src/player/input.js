@@ -21,20 +21,25 @@ export class Input {
     this._tap = -1e9;         // when the brake was last tapped (ms)
     this._padBrake = false;   // gamepad buttons last step, for their edges
     this._padTrick = false;
+    this.walking = false;
+    this.walkX = 0; this.walkZ = 0; this.walkFast = false;
+    this.lookX = 0; this.lookY = 0;
+    this._lookX = 0; this._lookY = 0;
 
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+      if (e.repeat || e.target.closest?.('button, select, input, textarea, summary, [contenteditable]:not([contenteditable="false"])')) return;
       this.keys.add(e.code);
       this.pressed.add(e.code);
       if (e.code === 'Space') this._tapBrake(e.timeStamp);
       if (this.enabled && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => this.clear());
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
     canvas.addEventListener('click', () => { if (this.enabled && !this.locked) canvas.requestPointerLock?.()?.catch?.(() => {}); });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked || !this.enabled) return;
+      if (this.walking) { this._lookX += e.movementX * this.sens; this._lookY += e.movementY * this.sens; return; }
       this.stickX = Math.max(-1, Math.min(1, this.stickX + e.movementX * this.sens));
       this.stickY = Math.max(-1, Math.min(1, this.stickY + e.movementY * this.sens));
     });
@@ -45,7 +50,16 @@ export class Input {
 
   /** A tap of the brake at time t (ms): the second of two close together is a double tap. */
   _tapBrake(t) {
+    if (this.walking) { this._tap = -1e9; return; }
     if (t - this._tap < DOUBLE_TAP) { this.pressed.add('Space2'); this._tap = -1e9; } else this._tap = t;
+  }
+
+  clear() {
+    this.keys.clear(); this.pressed.clear();
+    this.stickX = this.stickY = this.turn = this.pitch = 0;
+    this.walkX = this.walkZ = this.lookX = this.lookY = this._lookX = this._lookY = 0;
+    this.boost = this.brake = this.mouseBoost = this.mouseBrake = this.walkFast = false;
+    this._tap = -1e9;
   }
 
   take(code) {
@@ -60,6 +74,10 @@ export class Input {
     if (k.has('KeyD') || k.has('ArrowRight')) x += 1;
     if (k.has('KeyW') || k.has('ArrowUp')) y -= 1;
     if (k.has('KeyS') || k.has('ArrowDown')) y += 1;
+    let walkX = x, walkZ = y;
+    this.lookX = this.enabled && this.walking ? this._lookX : 0;
+    this.lookY = this.enabled && this.walking ? this._lookY : 0;
+    this._lookX = 0; this._lookY = 0;
     // the mouse stick springs back to centre like a self-centring joystick
     const relax = Math.exp(-dt * 2.6);
     this.stickX *= relax; this.stickY *= relax;
@@ -73,6 +91,9 @@ export class Input {
       const dz = (v) => (Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88);
       x += dz(p.axes[0] || 0);
       y += -dz(p.axes[1] || 0);
+      walkX += dz(p.axes[0] || 0);
+      walkZ += dz(p.axes[1] || 0);
+      if (this.walking && this.enabled) { this.lookX += dz(p.axes[2] || 0) * dt * 1.8; this.lookY += dz(p.axes[3] || 0) * dt; }
       if (p.buttons[7]?.value > 0.3 || p.buttons[0]?.pressed) boost = true;
       const padBrake = p.buttons[6]?.value > 0.3 || !!p.buttons[1]?.pressed;
       if (padBrake) brake = true;
@@ -89,6 +110,9 @@ export class Input {
     this.pitch = Math.max(-1, Math.min(1, y));
     this.boost = boost;
     this.brake = brake;
+    this.walkX = this.enabled ? walkX : 0;
+    this.walkZ = this.enabled ? walkZ : 0;
+    this.walkFast = this.enabled && boost;
     if (!this.enabled) { this.turn = 0; this.pitch = 0; this.boost = false; this.brake = false; }
   }
 }
