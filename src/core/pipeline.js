@@ -58,6 +58,8 @@ export class Pipeline {
       uStrength: { value: 0 },
       uRes: { value: this.size },
       uTime: U.uTime,
+      uClimate: U.uClimate,
+      uCamPos: U.uCamPos,
     });
     // The blur quad opens the sharp layer: it writes the blurred world AND the world's depth, so the
     // rider and particles that follow are depth-tested against the scene by the hardware.
@@ -206,6 +208,8 @@ uniform mat4 uPrevViewProj;
 uniform float uStrength;
 uniform vec2 uRes;
 uniform float uTime;
+uniform vec4 uClimate;
+uniform vec3 uCamPos;
 float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
 vec3 safe(vec3 c){ return (any(isnan(c)) || any(isinf(c))) ? vec3(0.0) : max(c, vec3(0.0)); }
 void main(){
@@ -213,13 +217,36 @@ void main(){
   c0.rgb = safe(c0.rgb);
   float z = texture(tDepth, vUv).r;
   gl_FragDepth = z;
-  if (uStrength <= 0.0){ gl_FragColor = c0; return; }
+  float heat = clamp(uClimate.x * uClimate.w, 0.0, 1.0);
+  if (uStrength <= 0.0 && heat <= 0.0){ gl_FragColor = c0; return; }
+  vec2 sceneUv = vUv;
   vec4 clip = vec4(vUv * 2.0 - 1.0, z * 2.0 - 1.0, 1.0);
   #ifdef REVERSED
   clip.z = z;
   #endif
   vec4 wp = uInvViewProj * clip;
   wp /= wp.w;
+  if (heat > 0.0){
+    // Sub-pixel shimmer on distant scenery only, before the sharp rider/HUD are composited.
+    float farMask = smoothstep(110.0, 480.0, distance(wp.xyz, uCamPos));
+    float horizon = 1.0 - smoothstep(0.65, 0.94, vUv.y);
+    vec2 ripple = vec2(sin(vUv.y * 163.0 + uTime * 1.8 + sin(vUv.x * 39.0)),
+                       sin(vUv.x * 111.0 - uTime * 1.4 + vUv.y * 73.0) * 0.42);
+    vec2 shift = ripple / uRes * (0.85 * heat * farMask * horizon);
+    vec2 candidate = clamp(vUv + shift, 0.001, 0.999);
+    float sampleZ = texture(tDepth, candidate).r;
+    vec4 sampleClip = vec4(candidate * 2.0 - 1.0, sampleZ * 2.0 - 1.0, 1.0);
+    #ifdef REVERSED
+      sampleClip.z = sampleZ;
+    #endif
+    vec4 sampleWorld = uInvViewProj * sampleClip;
+    float sampleFar = smoothstep(110.0, 480.0, distance(sampleWorld.xyz / sampleWorld.w, uCamPos));
+    // Reject offsets reaching a near silhouette; leave depth unchanged for overlay occlusion.
+    sceneUv = mix(vUv, candidate, farMask * sampleFar);
+    c0 = texture(tColor, sceneUv);
+    c0.rgb = safe(c0.rgb);
+  }
+  if (uStrength <= 0.0){ gl_FragColor = c0; return; }
   vec4 pc = uPrevViewProj * vec4(wp.xyz, 1.0);
   vec2 prevUv = pc.xy / pc.w * 0.5 + 0.5;
   vec2 vel = (vUv - prevUv) * uStrength;
@@ -235,7 +262,7 @@ void main(){
   float wsum = 0.0;
   for (int i = 0; i < TAPS; i++){
     float t = (float(i) + j) / float(TAPS - 1) - 0.5;
-    vec2 uv = vUv + vel * t;
+    vec2 uv = sceneUv + vel * t;
     vec3 s = safe(texture(tColor, clamp(uv, 0.001, 0.999)).rgb);
     // highlights streak further (keeps sparkles on water and petals lively)
     float w = 1.0 + dot(s, vec3(0.2126, 0.7152, 0.0722)) * 0.35;

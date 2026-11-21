@@ -15,6 +15,7 @@ import { Load } from '../core/progress.js';
 import { materialArrays, loadImage, dataTex } from './terrain.js';
 import { SPR } from '../fx/particles.js';
 import { waveHeight } from './water.js';
+import { winterTreeMesh } from './props.js';
 
 const NEAR = 135, MID = 560;       // metres: beyond NEAR the finest detail goes, beyond MID the middle level too
 const MAX_TOWNS = 2;               // shadow maps the world shaders can read
@@ -63,7 +64,7 @@ export class Town {
     tiles.order.forEach((n, i) => { tile[i] = tiles.tile[n]; const m = tiles.mean[n]; lum[i] = Math.max(0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2], 0.02); });
     const uniforms = {
       ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn',
-        'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP'),
+        'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uSeasonSnow', 'uSeasonBare'),
       uMatC: { value: mats.color }, uMatN: { value: mats.normal }, uTile: { value: tile }, uLum: { value: lum },
     };
     this.material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG });
@@ -131,6 +132,21 @@ export class Town {
     for (const s of meta.smokes || []) this.smokes.push({ pos: new THREE.Vector3().fromArray(s.pos), strength: s.strength, t: Math.random() });
     for (const l of meta.lamps || []) this.lamps.push({ pos: new THREE.Vector3().fromArray(l.pos), strength: l.strength });
     for (const b of meta.buildings) this.buildings.push({ ...b, town: meta.id });
+    const trees = meta.buildings.filter((b) => b.id.startsWith('p_tree_'));
+    if (trees.length) {
+      const winter = winterTreeMesh({ height: 1, lean: [-0.04, 0.03] }, trees.length);
+      const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+      trees.forEach((tree, i) => {
+        const height = tree.top - tree.pos[1];
+        rotation.setFromAxisAngle(up, tree.yaw * Math.PI / 180);
+        matrix.compose(new THREE.Vector3().fromArray(tree.pos), rotation, new THREE.Vector3(height, height, height));
+        winter.setMatrixAt(i, matrix);
+      });
+      winter.instanceMatrix.needsUpdate = true;
+      winter.computeBoundingSphere();
+      winter.boundingSphere.radius += 2.5;
+      tg.add(winter);
+    }
     for (const so of meta.solids || []) this.solids.push({ ...so, x1: so.x0 + so.nx * so.cell, z1: so.z0 + so.nz * so.cell, grid: new Uint16Array(buf, so.offset, so.nx * so.nz) });
     this.towns.push(t);
     this.group.add(tg);
@@ -279,7 +295,7 @@ void main(){
     vec3 wd = vec3(uWind.x, 0.0, uWind.y);
     float ph = dot(wp.xyz, vec3(1.7, 2.3, 1.1));
     float fl = sin(uTime * 6.1 + ph) * 0.6 + sin(uTime * 9.7 + ph * 1.7) * 0.4;
-    wp.xyz += (wd * (0.10 + 0.34 * gust) + n * fl * (0.05 + 0.10 * gust) + vec3(0.0, fl * 0.03, 0.0)) * wind;
+    wp.xyz += (wd * (0.10 + 0.34 * gust) + n * fl * (0.05 + 0.10 * gust) + vec3(0.0, fl * 0.03, 0.0)) * wind * uWind.z;
     vec4 wk = wakeAt(wp.xz);
     wp.xz += wk.xy * 0.30 * wind;
   }
@@ -298,6 +314,8 @@ precision highp sampler2DArray;
 uniform float uTime;
 uniform sampler2DArray uMatC;
 uniform sampler2DArray uMatN;
+uniform float uSeasonSnow;
+uniform float uSeasonBare;
 uniform float uTile[16];
 uniform float uLum[16];     // each material's mean brightness: a painted surface keeps its grain, not its colour
 varying vec3 vWorld;
@@ -314,6 +332,7 @@ ${SHADOW}
 ${TOWN_SHADOW}
 void main(){
   int mat = int(vInfo.x + 0.5);
+  if ((mat == 12 || (mat == 16 && vInfo.z > 0.1)) && uSeasonBare > hash12(floor(gl_FragCoord.xy))) discard;
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
   vec3 V = normalize(uCamPos - vWorld);
@@ -350,6 +369,15 @@ void main(){
   } else if (mat == 18) {            // still water in a basin
     alb = vec3(0.035, 0.16, 0.17); rough = 0.06; glass = 0.6;
   }
+  vec3 faceN = normalize(vN) * (gl_FrontFacing ? 1.0 : -1.0);
+  float roof = mat >= 5 && mat <= 8 ? smoothstep(0.12, 0.65, faceN.y) : 0.0;
+  float ledge = mat <= 11 || mat == 13 || mat == 16 ? smoothstep(0.85, 0.97, faceN.y)
+    * smoothstep(1.0, 2.0, vWorld.y - terrainH(vWorld.xz)) * 0.65 : 0.0;
+  float snow = uSeasonSnow * max(roof, ledge) * (0.9 + 0.1 * vnoise(vWorld.xz * 0.6));
+  alb = mix(alb, vec3(0.94, 0.97, 1.0), snow);
+  rough = mix(rough, 0.95, snow);
+  metal *= 1.0 - snow;
+  N = normalize(mix(N, faceN, snow * 0.75));
   float ao = vInfo.y;
   vec4 light = texture(uLightTex, worldUV(vWorld.xz));
   float sunVis = light.r * cloudShadow(vWorld.xz, uTime) * townShadow(vWorld, N) * riderShadow(vWorld);

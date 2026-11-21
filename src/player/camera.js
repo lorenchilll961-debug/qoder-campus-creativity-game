@@ -41,6 +41,7 @@ export class ChaseCamera {
     this._fq = new THREE.Quaternion();
     this._fe = new THREE.Euler(0, 0, 0, 'YXZ');
     this._fp = new THREE.Vector3();
+    this.eye = new THREE.Vector3();
     this._target = new THREE.Vector3();
     this._pos = new THREE.Vector3();
     this._up = new THREE.Vector3();
@@ -55,6 +56,7 @@ export class ChaseCamera {
       skip: 1, arc: null, phase: 0,        // see circle()
       block: { cut: 1, lift: 0 },
     };
+    this.walkView = { on: false, yaw: 0, pitch: 0, focus: new THREE.Vector3() };
     this._block = { cut: 1, lift: 0 };
     this._cp = new THREE.Vector3();
     this._pc = new THREE.Vector3();
@@ -105,10 +107,31 @@ export class ChaseCamera {
     c.on = true;
   }
 
+  /** Keep a camera-relative heading independent of the walking character's facing. */
+  startWalk(focus) {
+    const p = this.camera.position, w = this.walkView;
+    w.yaw = Math.hypot(p.x - focus.x, p.z - focus.z) > 0.1
+      ? Math.atan2(focus.x - p.x, p.z - focus.z) : this.flight.yaw;
+    w.pitch = 0; w.on = true;
+    w.focus.copy(focus);
+    this.circle(focus, { dist: 5.2, height: 1.5, spin: 0, fov: 58, lookY: 0, skip: 0.15, seconds: 0.4 });
+    return w.yaw;
+  }
+
+  lookWalk(dx = 0, dy = 0) {
+    const w = this.walkView;
+    w.yaw += dx;
+    w.pitch = Math.max(-0.35, Math.min(0.75, w.pitch + dy));
+    return w.yaw;
+  }
+
+  stopWalk() { this.walkView.on = false; }
+
   /** Give the view back to the chase camera over `seconds`. */
   release(seconds = 1.2) {
     const c = this.cine;
     c.on = false;
+    this.stopWalk();
     c.tout = Math.max(seconds, 0.05);
     // (while she stood by a wall the chase camera, unseen, was pressed up against it: let it out)
     this._block.cut = Math.max(this._block.cut, 0.7);
@@ -200,11 +223,11 @@ export class ChaseCamera {
     this.fovOut = this.fov;
 
     // ---- the goggles: blend the view over onto her eyes, eased over about a second
-    this.fpvK = damp(this.fpvK, this.mode === 3 ? 1 : 0, 2.4, dt);
+    this.fpvK = damp(this.fpvK, this.mode === 3 && !f.auto && !this.cine.on ? 1 : 0, 2.4, dt);
     if (this.fpvK > 0.001) {
       // the same tilted frame the rider is drawn in, the eye just above the broom's handle
       const q = this._fq.setFromEuler(this._fe.set(f.pitch, -f.yaw, -f.roll));
-      const eye = this._fp.set(0, 0.56, 0.12).applyQuaternion(q).add(f.pos);
+      const eye = this._fp.copy(this.eye);
       const k = this.fpvK * this.fpvK * (3 - 2 * this.fpvK);
       cam.position.lerp(eye, k);
       cam.quaternion.slerp(q, k);
@@ -218,10 +241,16 @@ export class ChaseCamera {
 
   /** The orbit, blended over the chase pose that update() has just set. */
   _circle(dt, surfaceAt) {
-    const c = this.cine, cam = this.camera, F = c.focus;
+    const c = this.cine, cam = this.camera, w = this.walkView, F = c.focus;
+    const walking = c.on && w.on;
     const pc = this._pc.copy(cam.position), qc = this._qc.copy(cam.quaternion);
     c.k = Math.min(1, Math.max(0, c.k + (c.on ? dt / c.tin : -dt / c.tout)));
-    if (c.on) {
+    if (walking) {
+      w.focus.lerp(F, 1 - Math.exp(-8 * dt));
+      c.az = dampAngle(c.az, w.yaw + Math.PI, 8, dt);
+      c.dist = damp(c.dist, 5.2 * Math.cos(w.pitch), 6, dt);
+      c.h = damp(c.h, 1.5 + 5.2 * Math.sin(w.pitch), 6, dt);
+    } else if (c.on) {
       // drift round, breathing in and out and up and down so the view keeps changing
       c.t += dt;
       if (c.arc) {
@@ -237,11 +266,12 @@ export class ChaseCamera {
       c.dist = damp(c.dist, Math.hypot(dx, dz), 3.0, dt);
       c.h = damp(c.h, pc.y - F.y, 3.0, dt);
     }
-    const p = this._cp.set(F.x + Math.sin(c.az) * c.dist, F.y + c.h, F.z - Math.cos(c.az) * c.dist);
+    const focus = walking ? w.focus : F;
+    const p = this._cp.set(focus.x + Math.sin(c.az) * c.dist, focus.y + c.h, focus.z - Math.cos(c.az) * c.dist);
     this._unblock(p, F.x, F.y + 0.2, F.z, c.block, dt, c.skip);
     const floor = surfaceAt(p.x, p.z) + 0.45;
     if (p.y < floor) p.y = floor;
-    this._m.lookAt(p, this._target.set(F.x, F.y + c.lookY, F.z), this._up.set(0, 1, 0));
+    this._m.lookAt(p, this._target.set(focus.x, focus.y + c.lookY, focus.z), this._up.set(0, 1, 0));
     this._q2.setFromRotationMatrix(this._m);
     const e = c.k * c.k * (3 - 2 * c.k);
     cam.position.copy(pc).lerp(p, e);

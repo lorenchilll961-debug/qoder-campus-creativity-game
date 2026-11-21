@@ -1,173 +1,103 @@
-# 重生之我用系统搓游戏
+# 花信风
 
-Qoder 高校创造力大赛作品
+**一张魔毯，一座岛，二十四节气里的信使旅程。**
 
----
+Qoder 高校创造力大赛作品「重生之我用系统搓游戏」。在浏览器里乘毯掠过花海与海崖，降落到港口的屋顶露台，走近居民接下一单春茶，再看看海岛如何随四时流转。
 
-# Petalwake
+## 现在可以玩什么
 
-*A broom, an island, a good wind.*
+- **二十四节气与四季切换**：春花、夏绿、秋色、冬季深黄枯草和积雪，配合风候、雨雪、雾与光照变化；面板提供节气、物候和农事介绍。
+- **魔毯飞行**：可加速、减速、侧倾与爬升；宽约 1.90 米、长约 2.84 米的魔毯带有轻微浮动和边缘波浪。
+- **同一个角色，上天也落地**：法师在飞行时端坐毯心，落地后支持第三人称步行、奔跑和跳跃，动画平滑切换；起降检查地形、建筑与净空。
+- **有来有往的第一单**：到信使公会找商店老板阿岚，明确接单后，将春茶送到露台茶馆，走近老林确认交货，获得 30 枚风铃币并补满风势。
+- **会活动的居民**：商店老板、茶馆村民与观星塔魔法师拥有骨骼动画、短程巡逻、朝向和近距离交互。
+- **全岛航图与探索手记**：地图显示玩家、配送目标、建筑和平台高度；岛上还散布着风之籽与十二处珍藏。
+- **四种飞行视角**：追随、贴地、远眺，以及带航向、速度、离地高度和目标指引的护目镜视角。落地自动使用第三人称镜头。
+- **电脑端中文体验**：专注键盘与鼠标操作，不提供手机端、虚拟摇杆或屏幕触控按钮。
 
-Petalwake is a small browser game about flying low and fast over flower meadows, sea cliffs and
-open water, and about what the air does behind you. The broom sheds a simulated pair of wake
-vortices, and the world answers to them: petals are wound up and carried along, grass is laid
-over, spray is torn off the sea, and the flowers you pass are left with fewer petals, the faster
-you went by.
+## 快速开始
 
-The island has people on it. Larkhaven is a harbour town of about a hundred hand-modelled
-buildings on the south shore; Cairnwick is a village on the northern cliffs; farms, mills and a
-beacon stand out in the meadows. A quarter of the buildings have somewhere high to set down: a
-tower gallery, a roof terrace, a lighthouse walk. Land there to deliver the parcel you are
-carrying and pick up the next.
-
-**Play it: <https://petalwake.non.io/v2>** (a desktop browser with WebGL2; the first load is about 95 MB).
-The first version, from before the towns, is still at <https://petalwake.non.io>.
-
-![Sprinting over the meadow with petals wound into the wake](screenshots/meadow_wake.jpg)
-
-<p>
-  <img src="screenshots/island.jpg" width="49%" alt="The island from out at sea">
-  <img src="screenshots/sea_spray.jpg" width="49%" alt="Spray torn off the water behind the broom">
-  <img src="screenshots/fjord_waterfall.jpg" width="49%" alt="The fjord and its waterfall">
-  <img src="screenshots/meadow_track.jpg" width="49%" alt="Three passes at three speeds: the faster the pass, the more petals are gone">
-  <img src="screenshots/lighthouse.jpg" width="49%" alt="The lighthouse on its sea stack">
-  <img src="screenshots/stone_circle.jpg" width="49%" alt="Standing stones in the meadow">
-</p>
-
-![Larkhaven from the sea](screenshots/larkhaven_harbour.jpg)
-
-<p>
-  <img src="screenshots/larkhaven_square.jpg" width="49%" alt="The market square in Larkhaven">
-  <img src="screenshots/larkhaven_above.jpg" width="49%" alt="The square, the walled orchard and the Crown on its hill">
-  <img src="screenshots/landing_approach.jpg" width="49%" alt="Coming in to land on the Star-gazer's Tower, its gallery lit up">
-  <img src="screenshots/landing_landed.jpg" width="49%" alt="Landed on the Couriers' Guild, over the market square">
-  <img src="screenshots/delivery_beacon.jpg" width="49%" alt="A gold light over the tower the parcel is for">
-  <img src="screenshots/kickflip.jpg" width="49%" alt="A kickflip along the quay">
-  <img src="screenshots/cairnwick.jpg" width="49%" alt="Cairnwick, the village on the northern cliffs">
-  <img src="screenshots/farmstead.jpg" width="49%" alt="A farm and its orchard out in the meadows">
-  <img src="screenshots/place_kettle_pools.jpg" width="49%" alt="The Kettle Pools, one of twelve hidden places">
-  <img src="screenshots/shore_crabs.jpg" width="49%" alt="Crabs on the south beach">
-</p>
-
-## Controls
-
-| | |
-|---|---|
-| <kbd>W</kbd> <kbd>S</kbd> or <kbd>↑</kbd> <kbd>↓</kbd> | dive, climb |
-| <kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> | bank |
-| <kbd>Shift</kbd> | ride the gust (boost) |
-| <kbd>Space</kbd> | ease up (brake) |
-| <kbd>Space</kbd> <kbd>Space</kbd> | land, when a landing place lights up near you; <kbd>Space</kbd> again to take off |
-| <kbd>Q</kbd> | kickflip, once you have caught ten wind seeds |
-| <kbd>J</kbd> | the journal of treasures found |
-| Mouse | click the view to steer with it; left button boosts, right button brakes |
-| <kbd>C</kbd> | camera: chase, low, far, goggles (first-person, with the courier's HUD) |
-| Touch | a virtual stick steers; the buttons switch the view, boost, and brake (double-tap the brake to land) |
-| <kbd>I</kbd> | invert pitch |
-| <kbd>P</kbd> | hide the HUD |
-| <kbd>M</kbd> | mute |
-| Gamepad | left stick steers, right trigger or A boosts, left trigger or B brakes |
-
-There is no way to fail. A dive rounds itself out and lands with a bounce, walls push you off, and
-the wind turns you home if you wander too far out to sea. Glowing wind seeds are scattered along
-the island's best lines; catching one tops up the gust.
-
-There is always one parcel to deliver. A gold light stands over the tower it is for, and the
-compass points the way: sometimes a hop across town, sometimes a flight to the other end of the
-island. Twelve odd places are hidden around the coast and the hills, each with its own plants and
-a treasure to find; the journal keeps hints for the ones you have not found. Down on the shore,
-the rocks are crusted with barnacles and the crabs run for it when you come by.
-
-## Run it locally
-
-There is no build step: the page loads ES modules straight from `src/`.
+需要 Python 3 和支持 WebGL2 的现代浏览器。游戏资源及 Three.js 已随仓库提供，**运行不需要 npm install，也没有打包步骤**。
 
 ```bash
-python3 tools/serve.py
+python3 tools/serve.py 6280
 ```
 
-Then open <http://localhost:6280>. Any static file server works just as well (it has to be served
-over HTTP; opening `index.html` from disk will not load the modules).
+打开 <http://localhost:6280>，等待资源与天空加载后点击「乘风而起」。也可以使用 `npm start`，它执行相同命令。必须通过 HTTP 访问，不能直接双击 HTML 文件。
 
-Options in the URL: `?q=low|medium|high` sets the meadow density, `?dpr=1.5` sets the pixel ratio,
-`?noscale` turns off the automatic resolution scaling, `?play` skips the title screen.
+性能较弱的设备可使用 <http://localhost:6280/?q=low&dpr=1>。首次加载包含较大的地形与模型资源；已跟踪的大文件显示字节进度，天空绘制等阶段另行显示进度。
 
-It has been developed and checked in Chrome only.
+| 参数 | 用途 |
+|---|---|
+| `q=low` / `medium` / `high` | 草甸密度 |
+| `dpr=1` | 限制像素比，降低 GPU 负担 |
+| `noscale` | 关闭自适应分辨率 |
+| `play` | 跳过标题屏 |
 
-## How it works
+本仓库暂未提供经验证的本版本公开试玩地址；本地运行的是包含节气、魔毯、步行和首单配送的整合版本。
 
-Everything is vanilla JavaScript on [three.js](https://threejs.org) r187 (WebGL2), with custom
-shaders for nearly all of it.
+## 操作说明
 
-- **The wake** ([src/fx/vortex.js](src/fx/vortex.js)). A ring of 256 cross-sections is laid down
-  behind the broom, each holding a counter-rotating pair of vortex cores. The cores drive each
-  other and their mirror images under the ground, so the pair sinks and then runs apart along the
-  deck; they fatten and weaken with age, drift on the wind, and are shed unsteadily so no two
-  stretches are alike. The ring starts tight at the broom and opens up behind it.
-- **What the wake does.** Particles (petals, leaves, spray, grit) sample the vortices on the CPU
-  ([src/fx/particles.js](src/fx/particles.js), [src/fx/windfx.js](src/fx/windfx.js)). The same
-  trail is drawn as a ribbon into two top-down maps: a scrolling field that grass, flowers, trees
-  and water read to lean, thrash and foam ([src/fx/wake.js](src/fx/wake.js)), and an island-wide
-  map of how many petals each spot has lost ([src/fx/strip.js](src/fx/strip.js)).
-- **The meadow** ([src/world/meadow.js](src/world/meadow.js)). Grass and flowers are placed on the
-  GPU around the camera. Flowers form one continuous field that thins by rank with distance, and
-  drop their petals one at a time as the map above fills in.
-- **The island** ([src/world/terrain.js](src/world/terrain.js),
-  [tools/terrain/bake.py](tools/terrain/bake.py)). A 6 km square heightfield, 4096 samples a side,
-  baked offline: stratified sea cliffs, a fjord, droplet erosion, a river and its waterfall, flower
-  drifts, and the light and shadow maps. It is drawn as a CDLOD quadtree with stochastic texture
-  sampling to hide tiling.
-- **Sea, river, sky** ([src/world/water.js](src/world/water.js),
-  [src/world/river.js](src/world/river.js), [src/world/clouds.js](src/world/clouds.js)). Gerstner
-  swell with shore surf and reflections; ray-marched clouds baked into a sky texture at load.
-- **The towns** ([src/world/town.js](src/world/town.js), [tools/town](tools/town)). Every building
-  is a short Python script that models it in Blender with a small kit of parts (walls with real
-  openings, stepped-course roofs, galleries, chimneys, signs): see
-  [tools/town/README.md](tools/town/README.md). A layout script seats them along hand-drawn
-  streets, the terrain is cut and filled to suit (the quay, the harbour basin, the moles), and the
-  lot is packed into quantised chunks with three levels of detail, a baked sun shadow map per
-  town, and a height grid for collisions.
-- **Errands** ([src/game](src/game)). Landing places, the approach and the dismount, deliveries,
-  and the kickflip.
-- **Hidden places and shore life** ([src/world/places.js](src/world/places.js),
-  [src/world/shore.js](src/world/shore.js)). Twelve dressed sites with a treasure each; barnacles,
-  weed and crabs along the coast.
-- **Flight and camera** ([src/player/flight.js](src/player/flight.js),
-  [src/player/camera.js](src/player/camera.js)). An arcade model tuned for skimming; the chase
-  camera closes in when you slow down and pulls back when you sprint.
-- **Frame** ([src/core/pipeline.js](src/core/pipeline.js)). HDR with MSAA, camera motion blur with
-  the rider and particles drawn sharp on top, bloom, god rays, a light lens pass and tonemapping.
-- **Sound** ([src/audio/audio.js](src/audio/audio.js)). Synthesised in the browser; no audio files.
+| 操作 | 飞行中 | 地面上 |
+|---|---|---|
+| W / S 或上下方向键 | 俯冲 / 爬升 | 前进 / 后退 |
+| A / D 或左右方向键 | 侧倾转向 | 左右移动（相机方向） |
+| Shift | 加速，消耗风势 | 奔跑 |
+| Space | 按住减速，双击请求降落 | 跳跃 |
+| G | 降落到脚下安全地面或屋顶 | 坐上魔毯起飞，需先落稳并留有净空 |
+| 鼠标 | 点击场景后转向，左键加速、右键减速 | 点击场景后环顾 |
+| E | — | 走近居民交谈、接单、确认交货 |
+| C | 追随 → 贴地 → 远眺 → 护目镜 | 保持第三人称步行，选择的飞行视角在起飞后恢复 |
+| M | 世界地图 | 世界地图 |
+| J | 探索手记 | 探索手记 |
+| 1–4 | 春 / 夏 / 秋 / 冬 | 春 / 夏 / 秋 / 冬 |
+| N / P / I | 静音 / 隐藏界面 / 反转飞行俯仰 | 同左 |
+| Q | 收集十枚风之籽后可凌空翻身 | — |
+| Esc | 释放鼠标，关闭地图或对话 | 同左 |
 
-## Layout
+地图也可通过任务卡按钮打开。电脑连接手柄时保留飞行轴向、加速、减速与翻身；完整地面交互使用键盘和鼠标。
 
-```
-index.html          the page, the title screen and the HUD
-src/                the game
-  core/             shared uniforms, the frame pipeline
-  world/            terrain, meadow, water, river, sky, clouds, props, seeds, towns, places, shore
-  player/           flight model, camera, input, the rider
-  game/             landing, deliveries, the kickflip
-  ui/               the journal
-  fx/               wake vortices, wake maps, particles, wind effects
-  shaders/          GLSL shared by every material
-  audio/            procedural sound
-assets/             what the game loads: baked terrain, models, textures
-vendor/three/       three.js r187, copied unmodified from the npm package
-tools/
-  serve.py          dev server (no caching, optional frame capture)
-  terrain/bake.py   builds everything in assets/terrain
-  town/             the building kit, one script per building, layout, terrain fitting, packing
-  shore/            builds the little kit of shells, weed, boulders and crabs
-  places/           lays out the hidden places
-  gen/              concept art, models and materials from fal and Meshy
-  blender/          turns generated meshes into game assets
-screenshots/
+## 第一单怎么完成
+
+1. 按 M 打开航图，找到金色标记的**信使公会**。
+2. 飞到目标附近，双击 Space 降落到平台，而不是楼下街道。
+3. 落稳后走近阿岚，按 E，再选择「接下春茶订单」。
+4. 按 G 起飞，用航图确认**露台茶馆**的位置与屋顶高度。
+5. 飞行一段距离后抵达茶馆，降落、走近老林，按 E 并确认交货。
+
+经过平台或自动落地不会代替确认交付。首单奖励只能领取一次，任务进度与风铃币保存在当前浏览器的本地存储中，刷新后保留；更换浏览器、站点端口或清除站点数据不会共享这份存档。旧存档键保留兼容。
+
+## 开发与验证
+
+原生 JavaScript ES 模块、Three.js r187、WebGL2、自定义 GLSL；无需框架或构建器。测试使用 Node.js **24 或更新版本**，直接解析实际模型、动画和地形／任务逻辑。
+
+```bash
+node --test src/game/*.test.mjs src/seasons/*.test.mjs src/ui/*.test.mjs
 ```
 
-## Rebuilding the island
+修改后还应在浏览器走完加载、飞行、落地步行、跳跃、起飞、地图与交货流程；测试通过不代表所有设备都能稳定达到相同帧率。涉及节气与着色器时需检查夏季基线、冬季草色、雨雪及切换过渡。
 
-The world is defined in `tools/terrain/bake.py`; change it there, not in the game.
+```text
+index.html          标题、HUD 和节气面板
+src/
+  core/             共享环境参数、渲染管线、加载进度
+  player/           魔毯与法师、飞行、输入、相机
+  game/             起降、地面移动、首单任务、NPC、HUD
+  seasons/          四季与节气参数、环境过渡、天气
+  ui/               地图、居民对话、探索手记、界面样式
+  world/            地形、城镇、草甸、水体、天空和海岸
+  fx/               尾流、花瓣、雨雪与加速拖尾
+  shaders/          共用 GLSL
+  audio/            浏览器合成音效
+assets/             已处理的地形、模型与材质及其许可
+vendor/             固定版本依赖及参考记录
+tools/              本地服务器与离线世界制作工具
+screenshots/        项目画面
+```
+
+### 可选：重建世界素材
+
+普通试玩无需重建资源。修改世界烘焙脚本前，请先备份 `assets/`；这些命令会重新生成资产。
 
 ```bash
 python3 -m venv tools/.venv
@@ -175,54 +105,25 @@ tools/.venv/bin/pip install -r tools/requirements.txt
 tools/.venv/bin/python tools/terrain/bake.py 4096 --keep-props
 ```
 
-A bake takes a little over a minute. `--keep-props` keeps trees, stones and boulders where they
-are; leave it off to scatter them afresh.
+城镇建模需要 Blender 与上述 Python 依赖，具体流程见 [城镇制作工具](tools/town/README.md)。`art/` 是本地中间产物，不是游戏运行依赖。保留的场景素材生成脚本可能调用付费服务，请勿当作启动步骤运行，也不要提交 API 密钥。
 
-## Rebuilding the towns
+## 当前边界
 
-Buildings and street furniture are modelled by the scripts in `tools/town/buildings` and
-`tools/town/props`, run inside Blender (5.2):
+- 配送目前是一条完整的新手首单，不是无限随机订单或多人经济系统。
+- 节气天气是温带海岛的艺术化表达，并非真实日期驱动、气象预测或各地区统一农事规则。
+- 仅面向电脑端，主要在 Chromium 桌面浏览器验证；不支持手机端，帧率取决于显卡、分辨率和画质。
+- 字体使用 CDN，离线时会回退至系统字体；游戏代码与主要资源从本站加载。
 
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender -b -P tools/town/make.py -- h_inn --render --blend
-```
+## 参考来源与许可
 
-That writes the mesh the game uses to `art/town/build`, a preview picture and a `.blend` file to
-open. `tools/town/layout.py` says where everything stands. After changing either:
+本项目是在 **Petalwake** 的开源代码与海岛资源基础上继续开发的版本，而非从零创作全部底层系统。基础飞行、尾流、岛屿、城镇与渲染管线沿用并修改自该项目；本仓库重点扩展中文体验、二十四节气与天气、统一法师步行／飞行、魔毯、首单配送、居民交互、地图和操作整合。
 
-```bash
-tools/town/build.sh
-```
+- **Petalwake / Jacob Miller**：MIT；保留根目录 [LICENSE](LICENSE) 的原始版权与许可。参考仓库：[petalwake](https://github.com/lorenchilll961-debug/petalwake)。原版演示：[petalwake.non.io/v2](https://petalwake.non.io/v2)，不代表本仓库的新功能版本。
+- **Three.js r187**：MIT，见 [vendor/three/LICENSE](vendor/three/LICENSE)；包含 Arseny Kapoulkine 的 meshoptimizer 解码器。
+- **KayKit Adventurers / Kay Lousberg**：法师模型及内嵌动画，CC0。见 [素材仓库](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) 与 [模型许可](assets/models/characters/KayKit-LICENSE.txt)。
+- **Magic Carpet / Anna M**：经 [Poly Pizza](https://poly.pizza/m/b5etBd2ELng) 获取，许可为 [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)。原始模型文件保持不变，运行时调整尺寸、座位区域和边缘波动；完整署名见 [魔毯素材记录](assets/models/vehicles/magic-carpet-LICENSE.txt)。
+- **Quaternius**：三位居民的模型与动画，CC0。见 [NPC 来源与校验记录](assets/models/npcs/SOURCES.txt) 和 [许可证](assets/models/npcs/LICENSE-Quaternius.txt)。
+- **霞鹜文楷**：SIL Open Font License 1.1，[字体项目](https://github.com/lxgw/LxgwWenKai)。
+- 部分继承的场景模型与材质由原项目使用 **Meshy / fal** 生成；配送设计和依赖核查另见 [参考记录](vendor/DELIVERY-REFERENCES.txt)。
 
-plans the lots, fits the ground and packs `assets/town`. `MODELS=1 tools/town/build.sh` runs every
-building script through Blender first (a few minutes), which a fresh clone needs once since
-`art/` is not in the repository. Fitting the ground always starts from the untouched island bake,
-kept in `art/terrain_base`; on a fresh clone, bake the island first (above) so that the copy it
-takes is a clean one.
-
-## Regenerating the art
-
-The rider, the trees and stones, and the pieces of the hidden places were generated, not modelled by hand: concept images from fal
-(`nano-banana-pro`), meshes from Meshy (`meshy-7.1`, image to 3D), ground and rock materials from
-fal (`patina`), then cleaned up, weighted for wind and exported with the Blender scripts. The
-scripts in `tools/gen` read `FAL_KEY` and `MESHY_API_KEY` from the environment. Their raw output
-goes to `art/`, which is not in this repository (it is about 250 MB); the processed results in
-`assets/` are.
-
-## License and credits
-
-Petalwake is released under the MIT License: see [LICENSE](LICENSE).
-
-- [three.js](https://threejs.org) r187, MIT. See [vendor/three/LICENSE](vendor/three/LICENSE).
-  It bundles the meshoptimizer decoder (MIT, Arseny Kapoulkine).
-- Fraunces and Karla, loaded from Google Fonts, SIL Open Font License.
-- Models and materials generated with [Meshy](https://www.meshy.ai) and [fal](https://fal.ai).
-
-## How it was made
-
-Petalwake was built in a day with [Claude Code](https://claude.com/claude-code) (Claude Fable 5.2)
-from a short brief and a reference clip for the mood, then tuned over a few rounds of play-testing
-notes. The towns, the deliveries, the hidden places and the shore life were added the next day,
-with the buildings modelled by a handful of helper agents working two at a time. The code, the
-shaders, the terrain bake and the asset pipeline were written by the model; the art was generated
-with the services credited above, apart from the buildings, which are modelled in code.
+代码许可不替代第三方素材各自的许可；转载、分发时应一并保留版权、署名及许可文件。

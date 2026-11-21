@@ -1,0 +1,32 @@
+.delivery-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 30px; border: 1px solid #d8bd79; border-radius: 18px; background: #19352f; color: #fff8ec; box-shadow: 0 24px 80px #0007; font-family: inherit; }
+.delivery-dialog::backdrop { background: #08181788; }
+.delivery-dialog[open] { display: flex; flex-direction: column; }
+.delivery-dialog > :not(.delivery-text) { flex-shrink: 0; }
+.delivery-dialog h2 { font-size: 26px; font-weight: 500; margin: 12px 0 20px; }
+.delivery-dialog .delivery-text { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding-right: 8px; }
+.delivery-eyebrow { color: #dcc68b; font-size: 12px; letter-spacing: .18em; }
+.delivery-text { font-size: 17px; line-height: 1.9; white-space: pre-line; }
+.delivery-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0 18px; }
+.delivery-actions button, .delivery-map-button { padding: 10px 20px; min-height: 40px; border-radius: 8px; border: 1px solid #bba66d; color: #fff8ec; background: #28473d; font: inherit; cursor: pointer; }
+.delivery-actions button:first-child { background: #e7d5a3; color: #25372e; }
+.delivery-actions button:focus-visible, .delivery-map-button:focus-visible { outline: 2px solid #ffe5a1; outline-offset: 4px; }
+.delivery-dialog small { opacity: .7; font-size: 11px; line-height: 1.7; }
+#job { width: min(338px, calc(50vw - 28px)); max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; overflow-wrap: anywhere; pointer-events: auto; padding: 15px 18px; border: 1px solid #eadcad55; border-radius: 12px; background: #17352ec9; }
+#job .job-name { font-size: 23px; line-height: 1.5; }
+#job .job-spot { display: block; }
+.job-objective { max-width: 300px; margin: 12px 0; font-size: 13px; line-height: 1.7; color: #f8e7bd; }
+.job-wallet { margin-top: 8px; font-size: 12px; color: #f4d38a; }
+.delivery-map-button { margin-top: 12px; padding: 5px 12px; font-size: 12px; pointer-events: auto; }
+#hud.quiet .delivery-map-button { visibility: hidden; }
+.prompt { max-width: calc(100vw - 36px); white-space: normal; justify-content: center; flex-wrap: wrap; letter-spacing: .03em; padding: 9px 14px; border-radius: 10px; background: #19352fd9; }
+@media (max-width: 900px), (max-height: 650px) {
+  #job { top: 12px; right: 14px; padding: 10px; }
+  #job .job-name { font-size: 19px; }
+  .job-meta { gap: 8px; font-size: 11px; letter-spacing: 0; }
+  .job-objective { margin: 5px 0; font-size: 12px; }
+  .prompt { bottom: 18px; width: max-content; max-width: calc(100vw - 350px); font-size: 11px; }
+  .delivery-dialog { padding: 16px 24px; }
+  .delivery-dialog h2 { margin: 8px 0 12px; font-size: 23px; }
+  .delivery-dialog .delivery-text { font-size: 15px; line-height: 1.7; }
+  .delivery-actions { margin: 16px 0 10px; }
+}

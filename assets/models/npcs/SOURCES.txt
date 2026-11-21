@@ -1,0 +1,57 @@
+Town residents — third-party asset record (2026-11-21)
+
+Author: Quaternius
+Asset license: CC0 1.0 Universal, Public Domain Dedication
+Commercial use, modification and redistribution permitted.
+The original license is preserved verbatim in LICENSE-Quaternius.txt.
+That upstream text names the male pack; the female pack's own author page
+separately confirms CC0. No character-creator application code is copied.
+
+Author pages / authorization:
+https://quaternius.com/packs/ultimatemodularcharacters.html
+https://quaternius.com/packs/ultimatemodularwomen.html
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Distribution repository: https://github.com/LuanDucate/Ducz.CharacterCreator
+Pinned commit: fcd215b58eec5c9ed97d0ba5f696d0e7dc085e08
+Original license: public/models/LICENSE-Quaternius.txt
+The repository scripts/convert-models.js repackages the author's embedded
+glTF exports into these GLBs. We use complete outfits, not custom exports.
+
+Exact upstream file -> local file -> assigned fictional role:
+public/models/Female/Formal.glb -> Formal.glb -> 阿岚 / 商店老板
+  1,631,212 bytes; 6,108 triangles; 10 primitives; 5 materials
+  SHA256 9a676084711f07e48c1c3071c7bfaddfb316e42acfcc47c92bd072f1b3d2be7f
+public/models/Male/Farmer.glb -> Farmer.glb -> 老林 / 村民
+  1,565,656 bytes; 5,476 triangles; 12 primitives; 8 materials
+  SHA256 68b4e47e5fd7929146d43a6a27d20936d9209006d3f8fbf6651e1adbcc8d2fa4
+public/models/Female/Witch.glb -> Witch.glb -> 白榆 / 魔法师
+  1,722,828 bytes; 6,872 triangles; 13 primitives; 6 materials
+  SHA256 7f0a8d21d9cc46fe2cc6dfe08746b49949cc3644623ba2ed9d7219993b931ac4
+
+Files copied without binary modification. Runtime floor offset: +0.02 m
+because the source walk cycles dip at most 0.016 m below their floor.
+Each file: 4 meshes, 1 skin, 62 joints, no textures, no external buffers,
+no required/used glTF extensions. No Draco/Meshopt/KTX2 decoder needed.
+Loaded with existing vendored Three.js r187 GLTFLoader and AnimationMixer.
+The creator application's Three ^0.168.0 / Vite ^5.4.0 dependencies are not
+imported. No new runtime packages or separate engine are introduced.
+
+All actual source clips (original spelling retained):
+Death, Gun_Shoot, HitRecieve, HitRecieve_2, Idle, Idle_Gun,
+Idle_Gun_Pointing, Idle_Gun_Shoot, Idle_Neutral, Idle_Sword, Interact,
+Kick_Left, Kick_Right, Punch_Left, Punch_Right, Roll, Run, Run_Back,
+Run_Left, Run_Right, Run_Shoot, Sword_Slash, Walk, Wave.
+Used clips: Idle and Walk, cross-faded over 0.25 seconds.
+Formal / Witch: Idle 2.083333 s, Walk 1.666667 s.
+Farmer: Idle 1.666667 s, Walk 1.333333 s.
+
+Other requested repository evaluated but NOT used:
+https://github.com/NoLimitNexus/game-models
+Current inspected commit: d188ebf93ceb3c4b95ba9bc6b1856cd1fd34915d
+Modular parts and separate animations; repository-authored meshes did not
+have a clear asset-license grant. Historical candidate at commit
+ d01cb986bb736b949984ea5a0e623ae80ab10396:
+ library/kaykit/characters/Mage.glb, 352,472 bytes, zero embedded animations.
+ licenses/kaykit-adventurers.txt grants CC0 for that KayKit candidate.
+Not chosen because it needs separately assembled animation assets.

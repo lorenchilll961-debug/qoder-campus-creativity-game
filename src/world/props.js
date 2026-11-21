@@ -3,9 +3,10 @@
 // shadows they throw on the ground). Each prop is also a stack of discs the broom can bump into.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from '../core/ctx.js';
 import { loadTracked } from '../core/progress.js';
-import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW } from '../shaders/common.js';
+import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW, SEASON } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
 
 const CELL = 48;
@@ -34,7 +35,7 @@ export class Props {
       for (const t of [sm.map, sm.normalMap, sm.roughnessMap]) if (t) { t.anisotropy = 8; }
       const mat = new THREE.ShaderMaterial({
         uniforms: {
-          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn'),
+          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare'),
           tMap: { value: sm.map }, tNormal: { value: sm.normalMap }, tRough: { value: sm.roughnessMap || sm.map },
           uHasRough: { value: sm.roughnessMap ? 1 : 0 },
           uFoliage: { value: hasWind ? 1 : 0 },
@@ -58,6 +59,13 @@ export class Props {
       mesh.frustumCulled = false;
       mesh.renderOrder = 300;
       this.group.add(mesh);
+      if (hasWind) {
+        const winter = winterTreeMesh(info, list.length);
+        winter.instanceMatrix = mesh.instanceMatrix;
+        winter.frustumCulled = false;
+        winter.renderOrder = mesh.renderOrder;
+        this.group.add(winter);
+      }
       this.counts[name] = list.length;
       if (name === 'lighthouse' && list.length) this._beacon(list[0], info);
     }
@@ -143,6 +151,65 @@ export class Props {
   }
 }
 
+export function winterTreeMesh(info, count) {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare'),
+      uFoliage: { value: 0 }, uSelf: { value: info.height * 1.5 },
+    },
+    defines: { HAS_WIND: '', WINTER_TREE: '' }, vertexShader: VERT, fragmentShader: FRAG,
+  });
+  const mesh = new THREE.InstancedMesh(winterTreeGeometry(info), material, count);
+  mesh.renderOrder = 300;
+  return mesh;
+}
+
+function winterTreeGeometry({ height, lean = [0, 0] }) {
+  const parts = [], up = new THREE.Vector3(0, 1, 0);
+  const spine = Array.from({ length: 8 }, (_, i) => {
+    const t = i / 7;
+    return new THREE.Vector3(lean[0] * Math.pow(t, 1.4) * 1.3, height * t, lean[1] * t * 1.3);
+  });
+  const segment = (a, b, r0, r1) => {
+    const direction = b.clone().sub(a);
+    const g = new THREE.CylinderGeometry(r1, r0, direction.length(), 7, 1);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, direction.normalize()));
+    g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    parts.push(g);
+  };
+  for (let i = 0; i < 7; i++) segment(spine[i], spine[i + 1], height * (0.045 * (1 - i / 7) + 0.002), height * (0.045 * (1 - (i + 1) / 7) + 0.002));
+  for (let i = 2; i < 7; i++) {
+    for (let side = 0; side < 3; side++) {
+      const angle = i * 2.4 + side * 2.094;
+      const reach = height * (0.38 - i * 0.027);
+      const direction = new THREE.Vector3(Math.cos(angle), 0.6, Math.sin(angle));
+      const root = spine[i];
+      const bend = root.clone().addScaledVector(direction, reach * 0.55);
+      const tip = root.clone().addScaledVector(direction, reach);
+      tip.x += lean[0] * 0.13; tip.z += lean[1] * 0.13; tip.y += height * 0.045;
+      const radius = height * (0.017 - i * 0.0017);
+      segment(root, bend, radius, radius * 0.55);
+      segment(bend, tip, radius * 0.55, height * 0.0012);
+      for (const fork of [-1, 1]) {
+        const twig = bend.clone().add(new THREE.Vector3(Math.cos(angle + fork * 0.8), 0.9, Math.sin(angle + fork * 0.8)).multiplyScalar(reach * 0.65));
+        segment(bend, twig, radius * 0.45, height * 0.0008);
+      }
+    }
+  }
+  const geometry = mergeGeometries(parts);
+  for (const part of parts) part.dispose();
+  geometry.computeTangents();
+  const positions = geometry.attributes.position;
+  const wind = new Float32Array(positions.count * 4);
+  for (let i = 0; i < positions.count; i++) {
+    wind[i * 4 + 1] = Math.pow(Math.max(0, Math.min(positions.getY(i) / height, 1)), 1.6);
+    wind[i * 4 + 3] = 1;
+  }
+  geometry.setAttribute('_wind', new THREE.BufferAttribute(wind, 4));
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 const VERT = /* glsl */`
 precision highp float;
 attribute vec4 tangent;
@@ -169,9 +236,9 @@ void main(){
     float ph = dot(foot.xz, vec2(0.37, 0.21));
     // the crown leans and recovers with each gust; leaves shiver on top of that
     float sway = (0.10 + 0.34 * gust) * (0.6 + 0.4 * sin(uTime * 1.7 + ph)) * _wind.g;
-    wp.xyz += wd * sway * 0.9 + vec3(-wd.z, 0.0, wd.x) * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g;
+    wp.xyz += (wd * sway * 0.9 + vec3(-wd.z, 0.0, wd.x) * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g) * uWind.z;
     vec3 fl = vec3(sin(uTime * 7.3 + wp.x * 3.1 + wp.y * 2.3), sin(uTime * 8.9 + wp.z * 3.7), sin(uTime * 6.1 + wp.x * 2.9 + wp.z * 2.1));
-    wp.xyz += fl * (0.018 + 0.05 * gust) * leaf;
+    wp.xyz += fl * (0.018 + 0.05 * gust) * leaf * uWind.z;
     // the broom's slipstream thrashes the branches
     vec4 wk = wakeAt(wp.xz);
     wp.xz += wk.xy * 0.35 * _wind.g;
@@ -205,14 +272,27 @@ ${ATMOSPHERE}
 ${CLOUD_SHADOW}
 ${TERRAIN_LOOKUP}
 ${SHADOW}
+${SEASON}
 void main(){
-  vec3 alb = texture(tMap, vUv).rgb;
-  vec3 nt = texture(tNormal, vUv).xyz * 2.0 - 1.0;
-  vec3 N = normalize(vN), T = normalize(vT.xyz - N * dot(vT.xyz, N)), B = cross(N, T) * vT.w;
-  N = normalize(T * nt.x + B * nt.y + N * nt.z);
+  #ifdef WINTER_TREE
+    if (uSeasonBare <= hash12(floor(gl_FragCoord.xy))) discard;
+    vec3 alb = vec3(0.16, 0.105, 0.065) * (0.8 + 0.4 * vnoise(vWorld.xz * 9.0 + vWorld.y));
+    vec3 N = normalize(vN);
+    float rough = 0.94;
+    float branchSnow = seasonSnowAt(vWorld, N.y)
+      * smoothstep(0.42, 0.65, vnoise(vWorld.xz * 0.9 + vWorld.y * 0.3));
+    alb = mix(alb, vec3(0.94, 0.97, 1.0), branchSnow);
+  #else
+    if (uFoliage > 0.5 && uSeasonBare > hash12(floor(gl_FragCoord.xy))) discard;
+    vec3 alb = texture(tMap, vUv).rgb;
+    vec3 nt = texture(tNormal, vUv).xyz * 2.0 - 1.0;
+    vec3 N = normalize(vN), T = normalize(vT.xyz - N * dot(vT.xyz, N)), B = cross(N, T) * vT.w;
+    N = normalize(T * nt.x + B * nt.y + N * nt.z);
+    float rough = mix(0.8, texture(tRough, vUv).g, uHasRough);
+  #endif
   vec3 V = normalize(uCamPos - vWorld);
-  float rough = mix(0.8, texture(tRough, vUv).g, uHasRough);
   float leaf = vInfo.y * uFoliage;
+  alb *= mix(vec3(1.0), uSeasonLeaves, leaf);
 
   vec4 light = texture(uLightTex, worldUV(vWorld.xz));
   // the baked map holds the ground's shadows; a tall prop climbs out of a low one

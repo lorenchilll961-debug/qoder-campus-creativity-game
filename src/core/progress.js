@@ -44,5 +44,5 @@ export function loaderProgress(url) {
 
 /** loadAsync, with byte progress. */
 export function loadTracked(loader, url) {
-  return new Promise((ok, err) => loader.load(url, ok, loaderProgress(url), err));
+  return loader.loadAsync(url, loaderProgress(url));
 }
