@@ -12,6 +12,7 @@ export class Hud {
       prompt: $('prompt'), card: $('card'), cardKicker: $('cardKicker'), cardName: $('cardName'), cardSub: $('cardSub'),
       trick: $('trick'), keys: $('keys'),
       jobStatus: $('jobStatus'), jobObjective: $('jobObjective'), jobCoins: $('jobCoins'), jobCompass: $('jobCompass'),
+      jobHeight: $('jobHeight'), jobTracking: $('jobTracking'),
     };
     this._prompt = null;
     this._cardT = 0;
@@ -40,6 +41,17 @@ export class Hud {
     if (e.jobObjective && e.jobObjective.textContent !== objective) e.jobObjective.textContent = objective;
     if (e.jobCoins) e.jobCoins.textContent = coins;
     if (e.jobCompass) e.jobCompass.hidden = status === 'completed';
+  }
+
+  navigation(target, flight, kind) {
+    const e = this.el;
+    if (e.jobCompass) e.jobCompass.hidden = !target;
+    if (e.jobTracking) e.jobTracking.textContent = !target ? '未跟踪航点 · M 选择目标' : kind === 'quest' ? '正在跟踪订单' : '正在跟踪地图航点';
+    if (e.jobHeight) {
+      const delta = target ? target.pos.y - flight.pos.y : 0;
+      e.jobHeight.textContent = target ? `高差 ${delta >= 0 ? '+' : '−'}${Math.abs(delta).toFixed(1)} m` : '';
+    }
+    if (!target && e.jobDist) e.jobDist.textContent = '';
   }
 
   /** Distance and bearing (radians, relative to the way she is heading) to where the parcel is going. */

@@ -1,5 +1,14 @@
 import { U } from '../core/ctx.js';
-import { SeasonCycle, SEASONS, SOLAR_TERMS } from './cycle.js';
+import { SEASONS, SOLAR_TERMS } from './cycle.js';
+import { daylightAt } from '../core/world-state.js';
+
+const CLOCK_PALETTE = [
+  ['uSkyZenith', [0.025, 0.042, 0.085], [0.08, 0.025, 0.055]],
+  ['uSkyMid', [0.06, 0.09, 0.15], [0.24, 0.07, 0.035]],
+  ['uSkyHorizon', [0.14, 0.18, 0.23], [0.56, 0.16, 0.045]],
+  ['uAmbSky', [0.22, 0.28, 0.4], [0.07, 0.012, 0]],
+  ['uAmbGround', [0.08, 0.1, 0.15], [0.04, 0.01, 0]],
+];
 
 const OVERCAST = [
   ['uSkyZenith', [0.18, 0.22, 0.29]],
@@ -9,7 +18,7 @@ const OVERCAST = [
 
 export class Seasons {
   constructor(panel, game) {
-    this.cycle = new SeasonCycle();
+    this.cycle = game.worldState.cycle;
     this.game = game;
     this.environment = Object.fromEntries(['uSunColor', 'uSkyZenith', 'uSkyMid', 'uSkyHorizon', 'uSunHalo', 'uAmbSky', 'uAmbGround', 'uFog', 'uWind'].map((key) => [key, U[key].value.clone()]));
     this.termDetails = panel.querySelector('#termDetails');
@@ -62,16 +71,15 @@ export class Seasons {
     for (const [id, direction] of [['previousTerm', -1], ['nextTerm', 1]]) {
       panel.querySelector(`#${id}`).addEventListener('click', (event) => {
         if (game.paused) return;
-        if (this.cycle.stepTerm(direction)) this.showSelection();
+        if (game.worldState.stepTerm(direction)) this.showSelection();
         if (event.detail > 0) event.currentTarget.blur();
       });
     }
     this.showSelection();
-    this.update(0);
   }
 
   select(id) {
-    if (!this.cycle.select(id)) return;
+    if (!this.game.worldState.setSeason(id)) return;
     this.showSelection();
   }
 
@@ -134,18 +142,41 @@ export class Seasons {
     U.uFog.value.y = mix(base.uFog.y, 1 / (420 + c.fog * 250));
   }
 
+  applyClock(c) {
+    const hour = this.game.worldState.hour;
+    const { light, night, dusk } = daylightAt(hour, c.daylight);
+    U.uDayNight.value.set(light, night, dusk, hour);
+    const sun = U.uSunColor.value, flash = U.uWeather.value.w * (1 - light);
+    sun.set(sun.x * light * (1 + dusk * 0.3) + night * 0.2 + flash * 0.55,
+      sun.y * light * (1 - dusk * 0.42) + night * 0.24 + flash * 0.65,
+      sun.z * light * (1 - dusk * 0.62) + night * 0.34 + flash * 0.8);
+    for (const [key, dark, warm] of CLOCK_PALETTE) {
+      const value = U[key].value;
+      const sunset = dusk * (1 - c.cloud * 0.55);
+      value.set(
+        value.x * light + dark[0] * (1 - light) + warm[0] * sunset,
+        value.y * light + dark[1] * (1 - light) + warm[1] * sunset,
+        value.z * light + dark[2] * (1 - light) + warm[2] * sunset,
+      ).addScalar(flash * (key.startsWith('uAmb') ? 0.18 : 0.22));
+    }
+    U.uSunHalo.value.multiplyScalar(light);
+    this.game.pipeline.overlay.environmentIntensity = 0.12 + light * 0.88;
+  }
+
   update(dt) {
     const wasTransitioning = this.cycle.progress < 1;
-    const state = this.cycle.update(dt);
+    const world = this.game.worldState;
+    world.update(dt, this.game.state === 'play');
+    const state = this.cycle.state;
     U.uSeasonGrass.value.fromArray(state.grass);
     U.uSeasonLeaves.value.fromArray(state.leaves);
     U.uSeasonBloom.value = state.bloom;
-    U.uSeasonSnow.value = state.snow;
+    U.uSeasonSnow.value = world.snow;
     U.uSeasonPastel.value = state.pastel;
     U.uSeasonBare.value = state.bare;
     U.uSeasonWither.value = state.wither;
-    U.uSeasonSnowfall.value = state.snowfall;
-    const c = state.climate;
+    U.uSeasonSnowfall.value = world.snowfall;
+    const c = world.climate;
     U.uClimate.value.set(c.strength, c.temperature, c.daylight, c.heat);
     U.uWeather.value.set(c.rain, c.cloud, c.fog, 0);
     U.uSurfaceWeather.value.set(c.wetness, c.dew, c.frost, c.frozenSoil);
@@ -160,6 +191,7 @@ export class Seasons {
     if (c.strength === 0) U.uWind.value.copy(baseWind);
     this.game.weather?.update(dt);
     this.applyAtmosphere(c);
+    this.applyClock(c);
     if (wasTransitioning) {
       this.progress.value = this.cycle.progress;
       if (this.cycle.progress === 1) this.showSelection();

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { U, shared } from '../core/ctx.js';
 import { NOISE, ATMOSPHERE } from '../shaders/common.js';
 
-export const SKY_UNIFORMS = ['uSunDir', 'uSunColor', 'uSkyZenith', 'uSkyMid', 'uSkyHorizon', 'uSunHalo', 'uAmbSky', 'uAmbGround', 'uFog', 'uCamPos', 'uClimate', 'uWeather'];
+export const SKY_UNIFORMS = ['uSunDir', 'uSunColor', 'uSkyZenith', 'uSkyMid', 'uSkyHorizon', 'uSunHalo', 'uAmbSky', 'uAmbGround', 'uFog', 'uCamPos', 'uClimate', 'uWeather', 'uDayNight'];
 
 const tri = () => {
   const g = new THREE.BufferGeometry();
@@ -28,6 +28,8 @@ vec4 sampleClouds(vec3 d){
   vec2 dx = dFdx(uv), dy = dFdy(uv);
   dx.x -= floor(dx.x + 0.5); dy.x -= floor(dy.x + 0.5);
   vec4 baked = textureGrad(uCloudTex, uv, dx, dy);
+  baked.rgb *= mix(vec3(0.14, 0.2, 0.32), vec3(1.0), uDayNight.x);
+  baked.rgb *= mix(vec3(1.0), vec3(1.2, 0.65, 0.48), uDayNight.z * 0.65);
   // Never rebake the static layer. Zero strength preserves even its premultiplied RGB exactly.
   float strength = clamp(uClimate.x, 0.0, 1.0);
   float cover = clamp(uWeather.y, 0.0, 1.0) * strength;
@@ -77,7 +79,16 @@ export class Sky {
           // sun: hot core with a soft limb; the bloom pass does the rest
           float disc = smoothstep(0.99982, 0.99994, mu);
           float corona = pow(max(mu, 0.0), 3000.0);
-          vec3 sun = uSunColor * (disc * 55.0 + corona * 6.0) * (1.0 - uEnv);
+          vec3 sun = uSunColor * (disc * 55.0 + corona * 6.0) * (1.0 - uEnv) * uDayNight.x;
+          vec2 starUv = vec2(atan(d.z, d.x), asin(clamp(d.y, -1.0, 1.0))) * 160.0;
+          vec2 starCell = floor(starUv);
+          vec2 starOffset = fract(starUv) - 0.2 - hash22(starCell) * 0.6;
+          float star = (1.0 - smoothstep(0.015, 0.16, length(starOffset))) * step(0.975, hash12(starCell + 17.0));
+          float moonMu = dot(d, normalize(vec3(-0.42, 0.72, -0.55)));
+          float moon = smoothstep(0.99935, 0.99958, moonMu);
+          vec3 nightSky = vec3(0.62, 0.76, 1.0) * star * 1.6 + vec3(0.85, 0.9, 1.0) * moon * 1.8;
+          nightSky += vec3(0.15, 0.22, 0.38) * pow(max(moonMu, 0.0), 180.0) * 0.15;
+          col += nightSky * uDayNight.y * smoothstep(0.0, 0.12, d.y) * (1.0 - uEnv);
           vec4 cl = sampleClouds(d);
           col = col * (1.0 - cl.a) + cl.rgb + sun * (1.0 - cl.a) * (1.0 - cl.a);
           // under the horizon: haze into deep sea colour (only ever seen in reflections / at great height)

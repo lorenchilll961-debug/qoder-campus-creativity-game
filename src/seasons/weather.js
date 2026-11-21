@@ -452,7 +452,7 @@ export class SeasonWeather {
       this._birdSpeed += (target - this._birdSpeed) * (1 - Math.exp(-dt * 2));
       this._birdTravel.value = mod(this._birdTravel.value + this._birdSpeed * dt, 420);
     }
-    const thunder = clamp(this.game.seasons?.cycle?.state?.climate?.thunder || 0);
+    const thunder = clamp(this.game.worldState.climate.thunder);
     // Fixed 18-second slots: changing a preset cannot make the clock run faster.
     const slot = Math.floor(this._simTime / 18), age = mod(this._simTime, 18) - 2.5;
     const selected = mod(slot, 4) === 0 || thunder > 0.5;

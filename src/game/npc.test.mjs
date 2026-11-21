@@ -590,7 +590,7 @@ function courierFixture() {
   const fixture = manager(actors), messages = [], writes = [], cards = [];
   const store = { get: (key, fallback) => fallback, set: (key, value) => writes.push({ key, value: structuredClone(value) }) };
   Object.assign(fixture.game, { fx: { sprites: { spawn() {} }, burst() {} }, rider: { sunVis: 1 } });
-  const hud = { job() {}, jobAt() {}, order() {}, card: (...args) => cards.push(args) };
+  const hud = { job() {}, jobAt() {}, order() {}, navigation() {}, card: (...args) => cards.push(args) };
   const courier = new Courier(fixture.game, store, hud);
   courier.setPads([pickup, destination, wizard]);
   courier.npcs = fixture.npcs;

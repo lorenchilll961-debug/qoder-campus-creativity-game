@@ -14,16 +14,6 @@ import { Kickflip } from './tricks.js';
 import { Hud } from './hud.js';
 import { WorldMap } from '../ui/world-map.js';
 
-/** localStorage, where there is one (private windows and embeds may refuse). */
-class Store {
-  get(key, fallback) {
-    try { const v = localStorage.getItem(`petalwake.${key}`); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
-  }
-  set(key, value) {
-    try { localStorage.setItem(`petalwake.${key}`, JSON.stringify(value)); } catch { /* it lasts the visit */ }
-  }
-}
-
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export class Gameplay {
@@ -31,7 +21,7 @@ export class Gameplay {
     this.game = game;
     this.params = new URLSearchParams(location.search);
     this.debug = this.params.has('debug');
-    this.store = new Store();
+    this.store = game.save;
     this.hud = new Hud();
     this.fixture = this.params.has('padtest') ? buildPadTest(game.terrain) : null;
     if (this.fixture) game.world.add(this.fixture.group);
@@ -59,6 +49,8 @@ export class Gameplay {
     this._bind();
     this.standReady = game.rider.loadStand();
   }
+
+  get navigationTarget() { return this.game.atlas.resolve(this.courier.target); }
 
   async attachUi() {
     await this.courier.attachUi();
@@ -105,8 +97,8 @@ export class Gameplay {
     const f = this.game.flight, L = this.landing;
     if (L.busy) return L.state === 'approach' || L.state === 'settle' ? L.pad : null;
     if (this.hush > 0) return null;
-    const target = this.courier.target;
-    if (target && Math.hypot(target.pos.x - f.pos.x, target.pos.y - f.pos.y, target.pos.z - f.pos.z) < LAND.RANGE) return target;
+    const target = this.game.atlas ? this.navigationTarget : this.courier.target;
+    if (target && this.open.includes(target) && Math.hypot(target.pos.x - f.pos.x, target.pos.y - f.pos.y, target.pos.z - f.pos.z) < LAND.RANGE) return target;
     let best = null, bd = Infinity;
     for (const p of this.open) {
       const d = Math.hypot(p.pos.x - f.pos.x, p.pos.y - f.pos.y, p.pos.z - f.pos.z) - (p === this.zone ? 6 : 0);
@@ -156,7 +148,12 @@ export class Gameplay {
         if (this.zone) L.begin(this.zone); else L.beginGround();
       }
     }
-    if (this.beacons) this.beacons.update(dt, f.pos, this.zone, this.courier.target, L.pad);
+    if (play && g.atlas) {
+      const found = g.atlas.update(dt, L.landed && L.walk ? L.walk.pos : f.pos);
+      for (const landmark of found) if (landmark.kind === 'place') g.places.byId.get(landmark.id.slice(6)).visited = true;
+      if (found.length) g.toast?.(`发现 ${found.map((landmark) => landmark.name).join('、')} · 获得探索奖励`);
+    }
+    if (this.beacons) this.beacons.update(dt, f.pos, this.zone, g.atlas ? this.navigationTarget : this.courier.target, L.pad);
     this.courier.update(dt, ctl);
     this._prompt(play);
     this.hud.update(dt);

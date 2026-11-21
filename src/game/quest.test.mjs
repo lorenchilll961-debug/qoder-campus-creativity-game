@@ -10,6 +10,11 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { Courier } = await import('./courier.js');
+const { Gameplay } = await import('./index.js');
+const { Beacons } = await import('./beacons.js');
+const { Hud } = await import('./hud.js');
+const { AtlasState } = await import('../core/atlas-state.js');
+const { SaveService } = await import('../core/save.js');
 
 function store(initial = null) {
   let value = initial;
@@ -87,7 +92,7 @@ test('重复引导观测不会逐帧写入存档', () => {
 });
 
 function courierFixture() {
-  const messages = [], cards = [], hud = { job() {}, jobAt() {}, order() {}, card: (...a) => cards.push(a) };
+  const messages = [], cards = [], hud = { job() {}, jobAt() {}, order() {}, navigation() {}, card: (...a) => cards.push(a) };
   const game = { state: 'play', paused: false, gameplay: { landing: { ...landing, busy: true, walk: { pos: { x: 0, y: 10, z: 0 } } } },
     flight: { pos: { ...flight.pos }, yaw: 0, gust: 0 }, rider: { sunVis: 1 },
     toast: (s) => messages.push(s), fx: { sprites: { spawn() {} }, burst() {} } };
@@ -113,6 +118,71 @@ test('配送集成：接单后目标改变，落地回调不加币，飞抵顾�
   assert.equal(c.deliver(destination), true); assert.equal(c.target, null);
   assert.equal(c.count, 1); assert.equal(c.quest.coins, 30); assert.equal(g.flight.gust, 1);
   assert.equal(c.deliver(destination), false); assert.equal(c.count, 1);
+});
+
+test('地图航点统一驱动导航，不能改写首单端点或生成可降落平台', () => {
+  const { courier: c, game: g, pickup, destination } = courierFixture();
+  const atlas = g.atlas = new AtlasState(new SaveService(null), { meta: { world: 6144 } }, [
+    { id: 'pad:destination', kind: 'landing', name: destination.name, pos: destination.pos, pad: destination },
+  ]);
+  const nav = [], jobs = [];
+  c.hud.navigation = (...args) => nav.push(args);
+  c.hud.job = (...args) => jobs.push(args);
+  const pin = atlas.addPin({ x: 1, y: 100, z: 1 }, '山顶');
+  atlas.track('pin', pin.id);
+  c.update(0.1, { turn: 0, pitch: 0 });
+  assert.equal(c.target, pickup); assert.equal(c.navigationTarget, pin);
+  assert.equal(nav.at(-1)[0], pin); assert.equal(nav.at(-1)[2], 'pin');
+  assert.equal(jobs.at(-1)[0], '山顶');
+  assert.match(c.objective(), /不会改变订单/);
+  assert.equal(c.accept(pickup), true); assert.equal(c.target, destination);
+  assert.equal(c.navigationTarget, pin);
+  const gameplay = Object.assign(Object.create(Gameplay.prototype), {
+    game: g, courier: c, landing: { busy: false }, hush: 0, zone: null, open: [],
+  });
+  assert.equal(gameplay._zone(), null);
+  gameplay.open = [pickup, destination];
+  g.flight.pos = { ...destination.pos };
+  atlas.track('landmark', 'pad:destination');
+  assert.equal(gameplay.navigationTarget, destination);
+  assert.equal(gameplay._zone(), destination);
+  atlas.track('quest');
+  assert.equal(c.navigationTarget, destination);
+  atlas.clearTracking();
+  c.update(0.1, { turn: 0, pitch: 0 });
+  assert.equal(nav.at(-1)[0], null);
+  assert.equal(c.target, destination); assert.equal(c.quest.coins, 0);
+});
+
+test('HUD 保留真实平台高差，完成订单后仍可跟踪航点，停止时清空导航', () => {
+  const hud = Object.create(Hud.prototype);
+  hud.el = Object.fromEntries(['jobCompass', 'jobTracking', 'jobHeight', 'jobDist'].map((id) => [id, { textContent: '', hidden: false }]));
+  hud.order('completed', 30, '');
+  assert.equal(hud.el.jobCompass.hidden, true);
+  hud.navigation({ pos: { y: 80 } }, { pos: { y: 30 } }, 'pin');
+  assert.equal(hud.el.jobCompass.hidden, false);
+  assert.equal(hud.el.jobHeight.textContent, '高差 +50.0 m');
+  assert.match(hud.el.jobTracking.textContent, /地图航点/);
+  hud.navigation({ pos: { y: 10 } }, { pos: { y: 30 } }, 'quest');
+  assert.equal(hud.el.jobHeight.textContent, '高差 −20.0 m');
+  hud.el.jobDist.textContent = '100 m';
+  hud.navigation(null, { pos: { y: 30 } }, 'quest');
+  assert.equal(hud.el.jobCompass.hidden, true);
+  assert.equal(hud.el.jobHeight.textContent, ''); assert.equal(hud.el.jobDist.textContent, '');
+});
+
+test('普通图钉只有世界标记，真实平台仍有降落光圈，取消后标记隐藏', () => {
+  const real = { ...pad(), radius: 3 }, beacons = new Beacons([real]);
+  const player = { x: 0, y: 10, z: 0 }, pin = { pos: { x: 100, y: 90, z: 200 } };
+  beacons.update(1, player, null, pin, null);
+  assert.deepEqual(beacons.uMark.value.toArray(), [100, 90, 200, 1]);
+  assert.equal(beacons.state[0].gold, 0); assert.equal(beacons.state[0].zone, 0);
+  beacons.update(1, player, real, real, null);
+  assert.ok(beacons.state[0].gold > 0); assert.ok(beacons.state[0].zone > 0);
+  assert.deepEqual(beacons.uMark.value.toArray().slice(0, 3), [0, 10, 0]);
+  beacons.update(1, player, null, null, null);
+  assert.equal(beacons.uMark.value.w, 0);
+  beacons.dispose();
 });
 
 test('缺少真实端点时不随机分单，暂停和空中不触发交谈', () => {

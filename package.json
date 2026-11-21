@@ -5,9 +5,11 @@
   "license": "MIT",
   "description": "花信风：电脑端二十四节气海岛探索游戏，魔毯飞行、法师步行与居民配送。Three.js，无构建步骤。",
   "scripts": {
-    "start": "python3 tools/serve.py 6280"
+    "start": "python3 tools/serve.py 6280",
+    "gemini:test": "node --env-file-if-exists=.env.local tools/gemini-smoke.mjs"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "three": "0.187.0"
   }
 }
