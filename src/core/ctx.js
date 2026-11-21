@@ -20,7 +20,16 @@ export const U = {
   uSeasonLeaves: { value: new THREE.Vector3(1, 1, 1) },
   uSeasonBloom: { value: 1 },
   uSeasonSnow: { value: 0 },
+  uSeasonBare: { value: 0 },
+  uSeasonWither: { value: 0 },
+  uSeasonSnowfall: { value: 0 },
   uSeasonPastel: { value: 0 },
+  uClimate: { value: new THREE.Vector4(0, 26, 14, 0) },
+  uWeather: { value: new THREE.Vector4() },
+  uSurfaceWeather: { value: new THREE.Vector4() },
+  uSeasonIce: { value: 0 },
+  uSeasonGoldBloom: { value: 0 },
+  uPhenology: { value: new THREE.Vector4() },
 
   // terrain lookups
   uHeightTex: { value: null },

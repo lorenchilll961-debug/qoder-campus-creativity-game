@@ -119,6 +119,7 @@ export class WindFX {
     const lightness = color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
     const pastel = [0.98 + 0.02 * lightness, 0.46 + 0.50 * lightness, 0.67 + 0.26 * lightness];
     const c = color.map((value, i) => value + (pastel[i] - value) * U.uSeasonPastel.value);
+    for (let i = 0; i < 3; i++) c[i] += (PAL.gold[i] - c[i]) * U.uSeasonGoldBloom.value;
     const v = rand(0.86, 1.1);
     this.flakes.spawn(x, y, z, vx, vy, vz, KIND.PETAL, rand(0.10, 0.19), c[0] * v, c[1] * v, c[2] * v, life, lit, rand(0.62, 0.86));
   }

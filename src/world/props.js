@@ -34,7 +34,7 @@ export class Props {
       for (const t of [sm.map, sm.normalMap, sm.roughnessMap]) if (t) { t.anisotropy = 8; }
       const mat = new THREE.ShaderMaterial({
         uniforms: {
-          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow'),
+          ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare'),
           tMap: { value: sm.map }, tNormal: { value: sm.normalMap }, tRough: { value: sm.roughnessMap || sm.map },
           uHasRough: { value: sm.roughnessMap ? 1 : 0 },
           uFoliage: { value: hasWind ? 1 : 0 },
@@ -153,7 +153,7 @@ export class Props {
 export function winterTreeMesh(info, count) {
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonLeaves', 'uSeasonSnow'),
+      ...shared(...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare'),
       uFoliage: { value: 0 }, uSelf: { value: info.height * 1.5 },
     },
     defines: { HAS_WIND: '', WINTER_TREE: '' }, vertexShader: VERT, fragmentShader: FRAG,
@@ -235,9 +235,9 @@ void main(){
     float ph = dot(foot.xz, vec2(0.37, 0.21));
     // the crown leans and recovers with each gust; leaves shiver on top of that
     float sway = (0.10 + 0.34 * gust) * (0.6 + 0.4 * sin(uTime * 1.7 + ph)) * _wind.g;
-    wp.xyz += wd * sway * 0.9 + vec3(-wd.z, 0.0, wd.x) * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g;
+    wp.xyz += (wd * sway * 0.9 + vec3(-wd.z, 0.0, wd.x) * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g) * uWind.z;
     vec3 fl = vec3(sin(uTime * 7.3 + wp.x * 3.1 + wp.y * 2.3), sin(uTime * 8.9 + wp.z * 3.7), sin(uTime * 6.1 + wp.x * 2.9 + wp.z * 2.1));
-    wp.xyz += fl * (0.018 + 0.05 * gust) * leaf;
+    wp.xyz += fl * (0.018 + 0.05 * gust) * leaf * uWind.z;
     // the broom's slipstream thrashes the branches
     vec4 wk = wakeAt(wp.xz);
     wp.xz += wk.xy * 0.35 * _wind.g;
@@ -274,7 +274,7 @@ ${SHADOW}
 ${SEASON}
 void main(){
   #ifdef WINTER_TREE
-    if (uSeasonSnow <= hash12(floor(gl_FragCoord.xy))) discard;
+    if (uSeasonBare <= hash12(floor(gl_FragCoord.xy))) discard;
     vec3 alb = vec3(0.16, 0.105, 0.065) * (0.8 + 0.4 * vnoise(vWorld.xz * 9.0 + vWorld.y));
     vec3 N = normalize(vN);
     float rough = 0.94;
@@ -282,7 +282,7 @@ void main(){
       * smoothstep(0.42, 0.65, vnoise(vWorld.xz * 0.9 + vWorld.y * 0.3));
     alb = mix(alb, vec3(0.94, 0.97, 1.0), branchSnow);
   #else
-    if (uFoliage > 0.5 && uSeasonSnow > hash12(floor(gl_FragCoord.xy))) discard;
+    if (uFoliage > 0.5 && uSeasonBare > hash12(floor(gl_FragCoord.xy))) discard;
     vec3 alb = texture(tMap, vUv).rgb;
     vec3 nt = texture(tNormal, vUv).xyz * 2.0 - 1.0;
     vec3 N = normalize(vN), T = normalize(vT.xyz - N * dot(vT.xyz, N)), B = cross(N, T) * vT.w;

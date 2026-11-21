@@ -26,7 +26,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { U, shared } from '../core/ctx.js';
-import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW } from '../shaders/common.js';
+import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW, MEADOW } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
 import { winterTreeMesh } from './props.js';
 import { KIND, SPR } from '../fx/particles.js';
@@ -226,6 +226,7 @@ export class Places {
     if (kind === 'flora') defines.FLORA = '';
     if (kind === 'gem') defines.GEM = '';
     if (info.name === 'blossom_tree' || info.name === 'east_pine') defines.SEASONAL_TREE = '';
+    if (info.name === 'blossom_tree') defines.BLOSSOM_TREE = '';
     // (generated meshes are flagged double-sided but are closed solids: like the props, draw their fronts only)
     const thin = info.thin ?? (kind === 'flora');
     if (thin) defines.THIN = '';
@@ -236,7 +237,7 @@ export class Places {
     const base = sm.color && !g.attributes.aColor ? sm.color : { r: 1, g: 1, b: 1 };
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        ...shared(...SHARED, 'uSeasonSnow'),
+        ...shared(...SHARED, 'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonPastel', 'uSeasonGoldBloom'),
         tMap: { value: sm.map || null }, tNormal: { value: sm.normalMap || null }, tRough: { value: sm.roughnessMap || null },
         uBase: { value: new THREE.Vector3(base.r, base.g, base.b) },
         uFoliage: { value: info.foliage ?? (hasWind ? 1 : 0) },
@@ -652,6 +653,8 @@ uniform float uTime;
 uniform vec4 uSway;        // wind response, model height (m), -, -
 uniform vec2 uCloth;       // length (m), amplitude (m)
 uniform vec3 uLod;         // plants shown, how much the survivors have grown, -
+uniform vec4 uClimate;
+uniform float uSeasonBloom;
 ${NOISE_TEX}
 ${TERRAIN_LOOKUP}
 ${WIND}
@@ -676,6 +679,8 @@ void main(){
     // the patch thins with distance and what is left grows, so it keeps its colour from the air
     float shown = 1.0 - smoothstep(uLod.x * 0.8, uLod.x, float(gl_InstanceID) + 0.5);
     lp *= uLod.y * shown;
+    // Budding plants remain small green shoots when the climate explicitly suppresses bloom.
+    lp *= mix(1.0, 0.32 + 0.68 * sqrt(clamp(uSeasonBloom, 0.0, 1.0)), clamp(uClimate.x, 0.0, 1.0));
     ph += aTint.a * 6.2831853;
     base = textureLod(uLightTex, worldUV(foot.xz), 0.0);
   #endif
@@ -688,7 +693,7 @@ void main(){
     #ifdef FLORA
       // stems lean with the gust fronts and nod on top of that, as the meadow's flowers do
       float H = uSway.y * length(M[1].xyz) * uLod.y;
-      vec2 lean = uWind.xy * (0.05 + 0.42 * gust) * uWind.z + vec2(-uWind.y, uWind.x) * sin(uTime * (2.3 + aTint.a * 1.9) + ph) * (0.05 + 0.11 * gust);
+      vec2 lean = (uWind.xy * (0.05 + 0.42 * gust) + vec2(-uWind.y, uWind.x) * sin(uTime * (2.3 + aTint.a * 1.9) + ph) * (0.05 + 0.11 * gust)) * uWind.z;
       vec4 wk = wakeAt(foot.xz);
       float whip = sin(uTime * 19.0 + ph * 7.0) * 0.45 * min(wk.z, 1.0);
       lean = lean * uSway.x + wk.xy * 0.85 * (1.0 + whip);
@@ -698,13 +703,13 @@ void main(){
       wp.xz += ld * sin(tilt) * up;
       wp.y -= (1.0 - cos(tilt)) * up;
       vec3 fl = vec3(sin(uTime * 7.3 + wp.x * 3.1 + wp.y * 2.3), sin(uTime * 8.9 + wp.z * 3.7), sin(uTime * 6.1 + wp.x * 2.9 + wp.z * 2.1));
-      wp.xyz += fl * (0.006 + 0.016 * gust) * leaf * min(H, 2.0);
+      wp.xyz += fl * (0.006 + 0.016 * gust) * leaf * min(H, 2.0) * uWind.z;
     #else
       // the crown leans and recovers with each gust; leaves shiver on top of that
       float sway = (0.10 + 0.34 * gust) * (0.6 + 0.4 * sin(uTime * 1.7 + ph)) * _wind.g * uSway.x;
-      wp.xyz += wd * sway * 0.9 + across * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g * uSway.x;
+      wp.xyz += (wd * sway * 0.9 + across * sin(uTime * 1.1 + ph * 1.7) * 0.10 * _wind.g * uSway.x) * uWind.z;
       vec3 fl = vec3(sin(uTime * 7.3 + wp.x * 3.1 + wp.y * 2.3), sin(uTime * 8.9 + wp.z * 3.7), sin(uTime * 6.1 + wp.x * 2.9 + wp.z * 2.1));
-      wp.xyz += fl * (0.018 + 0.05 * gust) * leaf;
+      wp.xyz += fl * (0.018 + 0.05 * gust) * leaf * uWind.z;
       // the broom's slipstream thrashes the branches
       vec4 wk = wakeAt(wp.xz);
       wp.xz += wk.xy * 0.35 * _wind.g;
@@ -715,7 +720,7 @@ void main(){
         float s = cloth * uCloth.x;
         float w1 = sin(s * 1.5 - uTime * (4.6 + 3.2 * gust) + ph);
         float w2 = sin(s * 2.6 - uTime * (7.4 + 3.6 * gust) + ph * 2.3);
-        float amp = uCloth.y * (0.45 + 0.9 * gust) * pow(cloth, 1.15);
+        float amp = uCloth.y * (0.45 + 0.9 * gust) * pow(cloth, 1.15) * uWind.z;
         wp.xyz += across * (w1 * 0.64 + w2 * 0.17) * amp + vec3(0.0, 1.0, 0.0) * (w2 * 0.18 + w1 * 0.16) * amp;
         wp.y -= cloth * cloth * uCloth.x * 0.30 * (1.0 - gust);
         wp.xz += wk.xy * 0.9 * cloth;
@@ -749,7 +754,6 @@ void main(){
 const FRAG = /* glsl */`
 precision highp float;
 uniform float uTime;
-uniform float uSeasonSnow;
 #ifdef HAS_MAP
 uniform sampler2D tMap;
 #endif
@@ -776,13 +780,25 @@ ${ATMOSPHERE}
 ${CLOUD_SHADOW}
 ${TERRAIN_LOOKUP}
 ${SHADOW}
+${MEADOW}
 void main(){
   #ifdef SEASONAL_TREE
-    if (uSeasonSnow > hash12(floor(gl_FragCoord.xy))) discard;
+    if (uSeasonBare > hash12(floor(gl_FragCoord.xy))) discard;
   #endif
   vec3 alb = vColor.rgb * uBase;
   #ifdef HAS_MAP
     alb *= texture(tMap, vUv).rgb;
+  #endif
+  #if defined(FLORA) || defined(BLOSSOM_TREE)
+    if (uClimate.x > 0.0){
+      // Pick coloured/white petals, not green foliage or dark woody stems.
+      float petal = max(smoothstep(0.04, 0.18, max(alb.r - alb.g, alb.b - alb.g)),
+                        smoothstep(0.45, 0.80, min(alb.r, min(alb.g, alb.b))));
+      float bloom = clamp(uSeasonBloom, 0.0, 1.0);
+      vec3 shoot = vec3(0.10, 0.26, 0.035) * (0.70 + 0.30 * dot(alb, vec3(0.333)));
+      vec3 petalColor = mix(shoot, seasonGoldPetal(alb), bloom);
+      alb = mix(alb, petalColor, petal * clamp(uClimate.x, 0.0, 1.0));
+    }
   #endif
   vec3 V = normalize(uCamPos - vWorld);
   vec3 N = normalize(vN);

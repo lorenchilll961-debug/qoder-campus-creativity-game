@@ -272,7 +272,7 @@ export class Terrain {
       uniforms: {
         ...shared(...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uTintTex', 'uWorld', 'uNoiseTex', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uWakeTex', 'uWake', 'uStripTex',
           'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
-          'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonPastel'),
+          'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonWither', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather'),
         uGrid: { value: GRID },
         uLodRange: { value: LOD_RANGE },
         uLodAlt: { value: 0 },
@@ -407,6 +407,7 @@ uniform vec3 uMean[8];
 uniform vec2 uGrassFade;
 uniform float uClipY;      // 1 in the water-reflection pass: drop everything below sea level
 uniform sampler2D uTintTex;
+uniform vec4 uSurfaceWeather; // wetness, dew, frost, frozen soil
 ${NOISE}
 ${NOISE_TEX}
 ${ATMOSPHERE}
@@ -508,12 +509,14 @@ void main(){
   Mat mg2 = sampS(L_GROUND, P.xz / 9.7 + 0.37, dPx.xz / 9.7, dPy.xz / 9.7);
   vec3 tint = meadowTint(P.xz, wet);
   vec3 gDetail = mix(mg.c / uMean[3], mg2.c / uMean[3], 0.45);
+  // dead sward keeps no green in its texture: only the luminance relief survives
+  gDetail = mix(gDetail, vec3(dot(gDetail, vec3(0.3333))), uSeasonWither * 0.8);
   // close up we look between the blades at shaded thatch; far away this stands in for the whole sward
   // grass clinging to steep ground and ledges is short, wind-burnt and darker
   float steepK = max(smoothstep(0.06, 0.24, slope), smoothstep(0.25, 0.8, cliffy) * 0.85);
-  tint = mix(tint, vec3(0.135, 0.170, 0.060) * uSeasonGrass, steepK * 0.7);
-  vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0);
-  vec3 swardNear = tint * 0.62 * gDetail;
+  tint = mix(tint, mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.41, 0.255, 0.070), uSeasonWither), steepK * 0.7);
+  vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0) * mix(1.0, 0.2, uSeasonWither);
+  vec3 swardNear = tint * mix(0.62, 0.86, uSeasonWither) * gDetail;
   // seen from afar the sward is tussocks, hollows and wind-combed patches, not a flat wash
   float mott = ntexA(P.xz * 0.55).r * 0.5 + nzA.b * 0.3 + nzB.a * 0.2;
   swardFar *= 0.70 + 0.62 * mott;
@@ -530,7 +533,7 @@ void main(){
   // in a town: streets and squares are paved, and nothing flowers where people walk
   vec4 town = townMask(P.xz);
   tintAmt *= 1.0 - town.a;
-  vec3 fcol = texture(uTintTex, uv).rgb;
+  vec3 fcol = seasonGoldPetal(texture(uTintTex, uv).rgb);
   meadow = mix(meadow, fcol, saturate(tintAmt));
   vec3 snowColor = vec3(0.94, 0.97, 1.0) * (0.94 + 0.06 * nzB.r);
   meadow = mix(meadow, snowColor, uSeasonSnow);
@@ -664,6 +667,32 @@ void main(){
     Nw = normalize(mix(Nw, normalize(N + vec3(mp.n.x, 0.0, mp.n.y) * 0.85), paved));
   }
 
+  // Weather films are independent of snow, and preserve all underlying material detail.
+  float exposed = smoothstep(-0.1, 1.0, P.y) * (0.45 + 0.55 * saturate(N.y));
+  float wetness = saturate(uSurfaceWeather.x) * exposed * (0.70 + 0.30 * nzB.g);
+  if (wetness > 0.0){
+    // wet dead sward darkens to a deep gold rather than going grey
+    vec3 wetTint = mix(vec3(0.60, 0.65, 0.68), vec3(0.74, 0.64, 0.42), uSeasonWither);
+    m.c *= mix(vec3(1.0), wetTint, wetness);
+    m.r = mix(m.r, min(m.r, 0.19 + 0.09 * nzC.b), wetness);
+    Nw = normalize(mix(Nw, N, wetness * 0.18));
+  }
+  if (uSurfaceWeather.w > 0.0){
+    // Frozen soil stays dark and granular: it is not a pale snow/frost blanket.
+    float frozen = uSurfaceWeather.w * exposed * (1.0 - rockAmt) * (1.0 - lowW) * (1.0 - max(town.r, town.g));
+    float grain = 0.70 + 0.30 * smoothstep(0.24, 0.76, nzC.r * 0.6 + m.h * 0.4);
+    // the dead sward keeps its straw tone under the freeze instead of turning blue-grey
+    vec3 frozenC = mix(vec3(0.70, 0.79, 0.91), vec3(0.86, 0.74, 0.46), uSeasonWither);
+    m.c *= mix(vec3(1.0), frozenC * grain, frozen);
+  }
+  if (uSurfaceWeather.z > 0.0){
+    // Sparse crystals on exposed high points; no normal smoothing or snow accumulation.
+    float crystal = smoothstep(0.65, 0.85, nzC.g) * smoothstep(0.48, 0.80, m.h);
+    float frost = uSurfaceWeather.z * exposed * saturate(N.y) * crystal;
+    m.c = mix(m.c, vec3(0.62, 0.72, 0.80), frost * 0.38);
+    m.r = mix(m.r, max(m.r, 0.84), frost * 0.35);
+  }
+
   float snow = seasonSnowAt(P, N.y) * (1.0 - town.a);
   m.c = mix(m.c, snowColor, snow);
   Nw = normalize(mix(Nw, N, snow * 0.85));
@@ -688,11 +717,24 @@ void main(){
   float ndh = saturate(dot(Nw, H));
   float D = a * a / (3.14159 * pow(ndh * ndh * (a * a - 1.0) + 1.0, 2.0));
   float F = 0.04 + 0.96 * pow(1.0 - saturate(dot(V, H)), 5.0);
-  float specMask = max(rockAmt, lowW);
+  float specMask = max(max(rockAmt, lowW), wetness * (1.0 - snow));
   col += uSunColor * sh * saturate(ndlRaw) * min(D, 40.0) * F * 0.25 * specMask;
   float fres = 0.04 + 0.96 * pow(1.0 - saturate(dot(Nw, V)), 5.0);
   vec3 R = reflect(-V, Nw);
   col += skyBase(normalize(vec3(R.x, abs(R.y) + 0.02, R.z))) * fres * (1.0 - m.r) * (1.0 - m.r) * specMask * ao;
+
+  if (uSurfaceWeather.y > 0.0){
+    // Discrete millimetre droplets, not a white albedo wash. Fade sub-pixel cells to avoid crawl.
+    vec2 dropP = P.xz * 24.0;
+    vec2 dropId = floor(dropP), dropRnd = hash22(dropId + 17.3);
+    float dropR = length(fract(dropP) - (0.18 + 0.64 * dropRnd));
+    float dropAA = max(fwidth(dropR), 0.018);
+    float drop = 1.0 - smoothstep(0.085, 0.085 + dropAA, dropR);
+    drop *= step(0.72, dropRnd.x) * (1.0 - smoothstep(0.35, 1.2, max(length(dFdx(dropP)), length(dFdy(dropP)))));
+    vec3 dropN = normalize(Nw + vec3(dropRnd.x - 0.5, 0.0, dropRnd.y - 0.5) * 0.22);
+    float glint = pow(saturate(dot(dropN, H)), 48.0);
+    col += uSunColor * sh * (uSurfaceWeather.y * exposed * (1.0 - snow) * drop * glint * 2.5);
+  }
 
   col = applyAtmosphere(col, P);
   gl_FragColor = vec4(col, 1.0);

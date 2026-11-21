@@ -35,7 +35,7 @@ export class Journal {
     this.page.addEventListener('click', () => this.toggle(false));
 
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+      if (e.repeat || (!this.open && e.target.closest?.('button, select, input, textarea, summary, [contenteditable]:not([contenteditable="false"])'))) return;
       if (e.code === 'KeyJ' && (this.open || this.canOpen())) this.toggle();
       else if (e.code === 'Escape' && this.open) this.toggle(false);
     });
