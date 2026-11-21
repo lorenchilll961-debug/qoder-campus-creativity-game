@@ -38,7 +38,7 @@
     <div class="job-wallet">风铃币 <span id="jobCoins">0</span> · 首单报酬 30</div>
     <button type="button" class="delivery-map-button" id="openWorldMap">M 世界地图</button>
   </div>
-  <section class="season-panel" id="seasonPanel" aria-label="四季与节气环境切换">
+  <section class="season-panel" id="seasonPanel" tabindex="0" aria-label="四季与节气环境切换，可滚动查看详情">
     <div class="season-heading"><span>四时流转</span><span class="season-stage">环境试玩</span></div>
     <div class="season-modes" role="group" aria-label="环境模式">
       <button type="button" data-season-mode="seasons" aria-pressed="true">四季快捷</button>
@@ -78,6 +78,14 @@
   <div class="prompt" id="prompt"></div>
   <div class="card" id="card"><div class="card-kicker" id="cardKicker"></div><div class="card-name" id="cardName"></div><div class="card-sub" id="cardSub"></div></div>
   <div class="toast" id="toast"></div>
+  <div id="goggles" hidden>
+    <div id="gLadder"></div>
+    <div id="gHdg"><div id="gHdgStrip"></div><div id="gHdgCaret"></div></div>
+    <div id="gWater"><i></i></div>
+    <div class="g-box" id="gSpeedBox"><b id="gSpeed">0</b><small>km/h</small><div class="g-gust"><i id="gGustFill"></i></div></div>
+    <div class="g-box" id="gAltBox"><b id="gAlt">0</b><small>米 · 离地</small></div>
+    <div id="gParcel" hidden><svg viewBox="-12 -12 24 24" width="24" height="24"><path d="M0 -9 L5 6 L0 3 L-5 6 Z" fill="currentColor"/></svg><span id="gParcelDist"></span></div>
+  </div>
 </div>
 
 <div id="title">

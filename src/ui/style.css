@@ -11,13 +11,13 @@ body { font-family: "LXGW WenKai", "PingFang SC", sans-serif; color: var(--ink);
 
 /* ---------- title ---------- */
 #title {
-  position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+  position: fixed; inset: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 16px 0; text-align: center;
   background: radial-gradient(120% 90% at 50% 40%, rgba(9, 22, 40, 0.05), rgba(6, 14, 28, 0.62));
   transition: opacity 1.4s ease, visibility 1.4s; z-index: 5;
 }
 #title.loading { background: #0b1522; }
 #title.gone { opacity: 0; visibility: hidden; pointer-events: none; }
-.title-inner { padding: 24px; transform: translateY(-4vh); }
+.title-inner { width: min(808px, 100%); min-width: 0; padding: 24px; margin: auto; overflow-wrap: anywhere; }
 .kicker { margin: 0 0 10px; letter-spacing: 0.22em; text-transform: uppercase; font-size: 12px; opacity: 0.78; }
 h1 {
   margin: 0; font-family: "LXGW WenKai", "STKaiti", serif; font-weight: 400; font-style: normal;
@@ -45,7 +45,7 @@ kbd {
 #hud.quiet { opacity: 0; }
 .season-panel {
   position: absolute; left: 30px; bottom: 100px; width: 258px; padding: 14px 16px;
-  max-height: calc(100dvh - 210px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  max-height: calc(100dvh - 230px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; overflow-wrap: anywhere;
   border: 1px solid rgba(255, 248, 236, 0.24); border-radius: 14px; pointer-events: auto;
   background: rgba(14, 28, 30, 0.78); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
@@ -95,7 +95,7 @@ kbd {
   .season-heading { font-size: 14px; }
   .season-options { margin: 8px 0; }
   .season-options button { padding: 6px 2px; }
-  .season-panel > small { display: none; }
+  .season-panel { bottom: 80px; max-height: calc(100dvh - 200px); }
 }
 .hud-tl { position: absolute; left: 30px; top: 26px; }
 .seeds { display: flex; align-items: baseline; gap: 8px; font-family: "LXGW WenKai", serif; font-size: 34px; font-style: normal; }
@@ -111,7 +111,8 @@ kbd {
 .hud-br small { font: 500 11px "LXGW WenKai", sans-serif; letter-spacing: 0.2em; text-transform: uppercase; margin-left: 8px; opacity: 0.7; }
 .toast {
   position: absolute; left: 50%; top: 15%; transform: translateX(-50%); font-family: "LXGW WenKai", serif; font-style: normal; font-size: clamp(22px, 2.6vw, 38px);
-  opacity: 0; transition: opacity 0.9s ease; white-space: nowrap;
+  width: max-content; max-width: calc(100vw - 40px); text-align: center; overflow-wrap: anywhere;
+  opacity: 0; transition: opacity 0.9s ease;
 }
 .toast.show { opacity: 0.96; }
 
@@ -145,7 +146,7 @@ kbd {
 .prompt small { margin-left: 18px; font-size: 10px; letter-spacing: 0.18em; opacity: 0.62; }
 .prompt small kbd { margin-right: 7px; padding: 2px 6px; font-size: 10px; }
 
-.card { position: absolute; left: 50%; top: 23%; transform: translate(-50%, 12px); text-align: center; white-space: nowrap; opacity: 0; transition: opacity 0.8s ease, transform 1s cubic-bezier(0.2, 0.9, 0.2, 1); }
+.card { position: absolute; left: 50%; top: 23%; transform: translate(-50%, 12px); width: max-content; max-width: calc(100vw - 40px); text-align: center; overflow-wrap: anywhere; opacity: 0; transition: opacity 0.8s ease, transform 1s cubic-bezier(0.2, 0.9, 0.2, 1); }
 .card.show { opacity: 1; transform: translate(-50%, 0); }
 .card-kicker { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold); text-shadow: 0 0 18px rgba(255, 211, 107, 0.5), 0 1px 12px rgba(0, 20, 50, 0.55); }
 .card-name { margin-top: 5px; font: 400 clamp(34px, 4.6vw, 68px)/1.05 "LXGW WenKai", serif; letter-spacing: 0.02em; text-shadow: 0 2px 30px rgba(10, 30, 60, 0.5); }
@@ -155,3 +156,59 @@ kbd {
 .trick { margin-top: 12px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.75; transition: opacity 0.3s ease; }
 .trick kbd { min-width: 20px; padding: 2px 6px; margin-right: 8px; text-align: center; }
 .trick.cool { opacity: 0.3; }
+
+/* ---------- goggles: the first-person HUD, glued to the real horizon ---------- */
+#goggles { position: absolute; inset: 0; color: #ffe9c8; opacity: 0; transition: opacity 0.45s ease; }
+#goggles.on { opacity: 1; }
+#hud.goggles .hud-bl, #hud.goggles .hud-br { display: none; }
+#gLadder { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --ppr: 900px; will-change: transform; }
+.g-line {
+  position: absolute; left: 0; top: 0; height: 1.5px; width: 34vw;
+  transform: translate(-50%, calc(var(--r) * var(--ppr)));
+  background: linear-gradient(90deg, transparent, rgba(255, 233, 200, 0.8) 14%, rgba(255, 233, 200, 0.8) 86%, transparent);
+}
+.g-line.zero { width: 54vw; background: linear-gradient(90deg, transparent, rgba(255, 233, 200, 0.95) 10%, rgba(255, 233, 200, 0.95) 90%, transparent); }
+#gWater { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+#gWater i {
+  position: absolute; top: -1px; left: -14px; width: 10px; height: 2px; background: #ffe9c8; box-shadow: 0 0 8px rgba(255, 233, 200, 0.6);
+}
+#gWater i::before { content: ""; position: absolute; left: 18px; top: 0; width: 10px; height: 2px; background: #ffe9c8; }
+#gHdg {
+  position: absolute; left: 50%; top: 6.5%; transform: translateX(-50%); width: min(44vw, 560px); height: 40px; overflow: hidden;
+  border-bottom: 1px solid rgba(255, 233, 200, 0.4);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+#gHdgStrip { position: absolute; left: 0; top: 0; height: 100%; will-change: transform; }
+.g-tick { position: absolute; bottom: 0; width: 1px; height: 9px; background: rgba(255, 233, 200, 0.85); }
+.g-tick.major { height: 13px; width: 1.5px; }
+.g-tick span {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  font: 500 12px "LXGW WenKai", sans-serif; letter-spacing: 0.12em; white-space: nowrap; opacity: 0.9;
+}
+#gHdgCaret {
+  position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7px solid #ffe9c8;
+}
+.g-box { position: absolute; top: 50%; font: 400 32px/1 "LXGW WenKai", serif; font-style: normal; }
+.g-box small { display: block; margin-top: 6px; font: 500 10px "LXGW WenKai", sans-serif; letter-spacing: 0.26em; opacity: 0.65; font-style: normal; }
+#gSpeedBox { left: 13vw; transform: translateY(-135%); }
+#gAltBox { right: 13vw; transform: translateY(-135%); text-align: right; }
+.g-gust { margin-top: 9px; width: 118px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.g-gust i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #fff, var(--petal)); }
+#gParcel {
+  position: absolute; left: 50%; top: 57%; transform: translate(-50%, 0);
+  display: flex; align-items: center; gap: 8px; font: 500 13px "LXGW WenKai", sans-serif; letter-spacing: 0.14em; color: var(--gold);
+}
+#gParcel svg { filter: drop-shadow(0 0 6px rgba(255, 211, 107, 0.7)); transition: transform 0.12s linear; }
+
+@media (max-width: 900px), (max-height: 650px) {
+  .title-inner { padding: 16px 24px; }
+  h1 { font-size: clamp(52px, min(11vw, 16vh), 110px); }
+  .bar { margin-top: 20px; }
+  #start { margin-top: 18px; }
+  .keys { margin-top: 20px; gap: 8px 18px; font-size: 12px; }
+  .hud-tl { left: 14px; top: 12px; }
+  .hud-bl { left: 14px; bottom: 18px; width: 150px; }
+  .hud-br { right: 14px; bottom: 16px; font-size: 32px; }
+}

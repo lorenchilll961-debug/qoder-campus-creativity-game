@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { U, World, shared } from '../core/ctx.js';
 import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, MEADOW, SHADOW, STRIP, TOWN_SHADOW, TOWN_MASK } from '../shaders/common.js';
+import { Load } from '../core/progress.js';
 import { SKY_UNIFORMS } from './sky.js';
 
 // CDLOD. For seams to stay closed, level L may only begin morphing beyond the farthest point any
@@ -16,7 +17,7 @@ const MAX_NODES = 2600;
 // createImageBitmap decodes off the main thread and, unlike img.decode(), does not wait on the
 // page's rendering loop (which stalls in a hidden or throttled tab)
 export async function loadImage(url) {
-  const res = await fetch(url);
+  const res = await Load.fetch(url);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
   return createImageBitmap(await res.blob(), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
 }
@@ -115,7 +116,7 @@ export class Terrain {
   static async load(renderer, base = './assets') {
     const meta = await (await fetch(`${base}/terrain/meta.json`)).json();
     const [buf, splatImg, lightImg, tintImg, mats] = await Promise.all([
-      fetch(`${base}/terrain/height.u16`).then((r) => r.arrayBuffer()),
+      Load.fetch(`${base}/terrain/height.u16`).then((r) => r.arrayBuffer()),
       loadImage(`${base}/terrain/splat.png`),
       loadImage(`${base}/terrain/light.png`),
       loadImage(`${base}/terrain/tint.png`),

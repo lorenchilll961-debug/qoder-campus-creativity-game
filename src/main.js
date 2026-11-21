@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { U, World, applyEnv } from './core/ctx.js';
 import { Pipeline } from './core/pipeline.js';
+import { Load } from './core/progress.js';
 import { Terrain, makeNoiseTexture } from './world/terrain.js';
 import { Sky } from './world/sky.js';
 import { Water } from './world/water.js';
@@ -22,6 +23,7 @@ import { Town } from './world/town.js';
 import { Places } from './world/places.js';
 import { Sound } from './audio/audio.js';
 import { Gameplay } from './game/index.js';
+import { far } from './game/hud.js';
 import { Seasons } from './seasons/index.js';
 import { SEASONS } from './seasons/cycle.js';
 import { SeasonWeather } from './seasons/weather.js';
@@ -101,7 +103,13 @@ async function boot() {
   const riderLoad = Rider.load(renderer);
   const propsLoad = Props.load();
   const townLoad = Town.load(renderer);
-  const terrain = (game.terrain = await Terrain.load(renderer));
+  // the bar breathes with the bytes while the island streams in
+  const terrainLoad = Terrain.load(renderer);
+  for (;;) {
+    setLoad(0.08 + 0.34 * Load.frac(), '正在唤起海岛……');
+    if (await Promise.race([terrainLoad.then(() => true), tick().then(() => false)])) break;
+  }
+  const terrain = (game.terrain = await terrainLoad);
   terrain.mainView.mesh.renderOrder = 500;
   world.add(terrain.mainView.mesh);
   await tick();
@@ -287,6 +295,9 @@ function advance(dt, ctl) {
   // (the title screen's self-flying broom leaves the meadow as it found it)
   if (game.state === 'play' || params.has('debug')) game.strip.update(dt);
   if (!game.freeCam) {
+    rider.group.updateMatrixWorld(true);
+    rider.standing.head.getWorldPosition(chase.eye);
+    chase.eye.y += 0.08;
     chase.update(dt, t, (x, z) => flight.surfaceAt(x, z, t));
     game.fov = chase.fovOut;
   }
@@ -304,7 +315,7 @@ function advance(dt, ctl) {
   _bl.set(-0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
   _br.set(0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
   const trail = THREE.MathUtils.clamp((flight.speed - 34) / 26, 0, 1) * 0.42 + flight.boosting * 0.5;
-  fx.updateRibbons(dt, _bl, _br, camera.position, trail);
+  fx.updateRibbons(dt, _bl, _br, camera.position, trail, flight.boosting);
   game.river.update(dt, fx.sprites, camera.position, fx.sunTint(rider.sunVis));
   // wind seeds
   const got = game.seeds.update(dt, flight.pos);
@@ -347,6 +358,7 @@ function step(dt) {
   const f = game.flight;
   game.sound.update(dt, { speed: f.speed, boosting: f.boosting, contact: game.fx.contact, surface: game.fx.surface, roll: f.roll, shore: Math.max(shoreNear(dt), (game.river.near || 0) * 1.6), agl: f.agl * (game.river.near > 0.2 ? 0.2 : 1) });
   hud(dt);
+  goggles(dt);
 }
 
 function render(dt) {
@@ -354,6 +366,7 @@ function render(dt) {
   if (!pipeline.sceneRT) { resize(); if (!pipeline.sceneRT) return; }
   camera.updateMatrixWorld();
   U.uCamPos.value.copy(camera.position);
+  game.rider.group.visible = !(game.chase.fpvK > 0.55 && game.state === 'play' && !game.gameplay.landing.busy && !game.freeCam);
   game.weather.prepare(camera, pipeline.size, pipeline.reversed);
   game.rider.renderShadow(pipeline.reversed);
   game.water.renderReflection(camera, pipeline.size);
@@ -445,6 +458,79 @@ function hud(dt) {
   }
 }
 
+// ---------------------------------------------------------------------------------- goggles hud
+// Her wind-goggles, on the C key's fourth view: the pitch ladder is glued to the real horizon
+// (the camera's own orientation, so it is true even mid-blend), the heading tape rolls with her,
+// and the parcel's chevron keeps the errand in view. All of it breathes with the game's HUD.
+const HDG_PX = 7;   // pixels per degree on the heading tape
+const gEl = {
+  root: $('goggles'), ladder: $('gLadder'), strip: $('gHdgStrip'), hdg: $('gHdg'),
+  speed: $('gSpeed'), alt: $('gAlt'), gust: $('gGustFill'),
+  parcel: $('gParcel'), parcelArrow: $('gParcel')?.querySelector('svg'), parcelDist: $('gParcelDist'),
+};
+(function buildGoggles() {
+  if (!gEl.ladder) return;
+  for (let d = -30; d <= 30; d += 10) {
+    const l = document.createElement('div');
+    l.className = 'g-line' + (d === 0 ? ' zero' : '');
+    l.style.setProperty('--r', ((d * Math.PI) / 180).toFixed(6));
+    gEl.ladder.appendChild(l);
+  }
+  const names = { 0: '北', 45: '东北', 90: '东', 135: '东南', 180: '南', 225: '西南', 270: '西', 315: '西北' };
+  for (let d = -60; d <= 420; d += 15) {
+    const t = document.createElement('div');
+    const dd = ((d % 360) + 360) % 360;
+    t.className = 'g-tick' + (names[dd] !== undefined ? ' major' : '');
+    t.style.left = `${(d + 60) * HDG_PX}px`;
+    if (names[dd] !== undefined) t.innerHTML = `<span>${names[dd]}</span>`;
+    gEl.strip.appendChild(t);
+  }
+  gEl.strip.style.width = `${481 * HDG_PX}px`;
+})();
+function setGoggles(on) {
+  if (!gEl.root) return;
+  gEl.root.hidden = !on;
+  gEl.root.classList.toggle('on', on);
+  $('hud').classList.toggle('goggles', on);
+}
+const _gf = new THREE.Vector3(), _gr = new THREE.Vector3();
+let gAcc = 0;
+function goggles(dt) {
+  if (!gEl.root) return;
+  // the HUD follows the camera mode wherever it was set from: the key, a pad or a script
+  const want = game.chase.mode === 3 && game.state === 'play' && !game.gameplay.landing.busy && !game.freeCam;
+  if (want !== gEl.root.classList.contains('on')) setGoggles(want);
+  if (!want) return;
+  const f = game.flight;
+  // the ladder follows the camera's true orientation, so it stays honest through the blend in
+  camera.getWorldDirection(_gf);
+  const pitch = Math.asin(THREE.MathUtils.clamp(_gf.y, -1, 1));
+  _gr.set(1, 0, 0).applyQuaternion(camera.quaternion);
+  const roll = Math.atan2(-_gr.y, Math.hypot(_gr.x, _gr.z));
+  const ppr = window.innerHeight / 2 / Math.tan((game.fov * Math.PI) / 360);
+  gEl.ladder.style.setProperty('--ppr', `${ppr.toFixed(1)}px`);
+  gEl.ladder.style.transform = `rotate(${(-roll).toFixed(4)}rad) translateY(${(pitch * ppr).toFixed(1)}px)`;
+  // heading tape: the tick for where she is heading sits under the caret
+  const yawDeg = ((((f.yaw * 180) / Math.PI) % 360) + 360) % 360;
+  const half = gEl.hdg.clientWidth / 2;
+  gEl.strip.style.transform = `translateX(${(half - (yawDeg + 60) * HDG_PX).toFixed(1)}px)`;
+  // the readouts can afford to run at ten hertz
+  gAcc += dt;
+  if (gAcc >= 0.1) {
+    gAcc = 0;
+    gEl.speed.textContent = Math.round(f.speed * 3.6);
+    gEl.alt.textContent = Math.max(0, Math.round(f.agl));
+    gEl.gust.style.width = `${Math.round(f.gust * 100)}%`;
+    const t = game.gameplay?.courier?.target;
+    if (t) {
+      gEl.parcel.hidden = false;
+      const brg = Math.atan2(t.pos.x - f.pos.x, -(t.pos.z - f.pos.z)) - f.yaw;
+      gEl.parcelArrow.style.transform = `rotate(${((brg * 180) / Math.PI).toFixed(1)}deg)`;
+      gEl.parcelDist.textContent = far(Math.hypot(t.pos.x - f.pos.x, t.pos.z - f.pos.z));
+    } else gEl.parcel.hidden = true;
+  }
+}
+
 // ---------------------------------------------------------------------------------- debug hooks
 /** Free camera: position + yaw/pitch in degrees (yaw 0 looks north, +yaw turns east). */
 game.view = (x, y, z, yaw = 0, pitch = 0) => {
@@ -465,7 +551,7 @@ game.fly = (x, z, agl = 6, yawDeg = 0, speed = SPEEDS.CRUISE, pitchDeg = 0) => {
   game.freeCam = false;
   game.wake.reset();
   game.vortex.reset();
-  for (const r of game.fx.ribbons) r.reset();
+  game.fx.resetRibbons();
   const f = game.flight;
   f.place(x, z, agl, yawDeg);
   f.speed = speed;

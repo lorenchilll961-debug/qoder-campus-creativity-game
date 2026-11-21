@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { U } from '../core/ctx.js';
+import { loadTracked } from '../core/progress.js';
+
 const SHADOW_SIZE = 1024;
 const SHADOW_EXTENT = 3.4; // half-width of the shadow box in metres
 const STAND_HEIGHT = 2.05;
@@ -8,7 +10,7 @@ const STAND_CLIPS = { Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: '
 
 export class Rider {
   static async load(renderer, base = './assets/models/vehicles') {
-    const gltf = await new GLTFLoader().loadAsync(`${base}/magic-carpet.glb`);
+    const gltf = await loadTracked(new GLTFLoader(), `${base}/magic-carpet.glb`);
     return new Rider(renderer, gltf.scene);
   }
 
@@ -129,7 +131,7 @@ export class Rider {
   }
 
   async loadStand(base = './assets/models/characters') {
-    const gltf = await new GLTFLoader().loadAsync(`${base}/Mage.glb`);
+    const gltf = await loadTracked(new GLTFLoader(), `${base}/Mage.glb`);
     return this.setStand(gltf.scene, gltf.animations);
   }
 
@@ -188,7 +190,7 @@ export class Rider {
     }
     this.group.add(root);
     // Planted-sole speeds measured from the bundled in-place clips, before scaling.
-    this.standing = { root, model, height: STAND_HEIGHT, mixer, actions, state: 'Idle',
+    this.standing = { root, model, head: model.getObjectByName('head'), height: STAND_HEIGHT, mixer, actions, state: 'Idle',
       legs: ['Mage_LegLeft', 'Mage_LegRight'].map((name) => model.getObjectByName(name)),
       footBox: new THREE.Box3(), stride: { Walk: 0.74 * scale, Run: 4.4 * scale },
       rideOffset, ridePosition: new THREE.Vector3(), groundY: 0,
@@ -288,6 +290,8 @@ export class Rider {
     cam.lookAt(p);
     cam.updateMatrixWorld();
     const r = this.renderer;
+    const visible = this.group.visible;
+    this.group.visible = true;
     // draw only the rider, with a depth-only material
     const parent = this.group.parent;
     this.shadowScene.add(this.group);
@@ -299,6 +303,7 @@ export class Rider {
     r.setRenderTarget(null);
     r.shadowMap.enabled = prev;
     this.shadowScene.overrideMaterial = null;
+    this.group.visible = visible;
     if (parent) parent.add(this.group);
     // world -> shadow uv + standard depth (0 near .. 1 far), independent of the depth convention
     const view = cam.matrixWorldInverse;

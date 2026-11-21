@@ -1,5 +1,4 @@
-// Input: keyboard, pointer-lock mouse (sprung virtual stick) and gamepad, merged into one state.
-// The brake doubles as the landing key: held it is the brake as ever, tapped twice inside
+// Input: keyboard, pointer-lock mouse (sprung virtual stick) and gamepad. The brake doubles as the landing key: held it is the brake as ever, tapped twice inside
 // DOUBLE_TAP ms it also posts 'Space2' to `pressed` (come in to land; see game/index.js).
 const DOUBLE_TAP = 300;
 

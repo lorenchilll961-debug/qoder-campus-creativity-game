@@ -436,6 +436,45 @@ function standFixture(gltf) {
   return { ...context, rider, S, advance };
 }
 
+test('goggles follow the Mage eye position and yield to landing and walking', () => {
+  const { g } = fixture(), chase = g.chase;
+  assert.deepEqual(Array.from({ length: 4 }, () => chase.next()), ['贴地', '远眺', '护目镜', '追随']);
+  chase.mode = 3; chase.eye.set(0, 31.2, 0);
+  for (let i = 0; i < 300; i++) chase.update(1 / 60, i / 60, () => 0);
+  assert.ok(g.camera.position.distanceTo(chase.eye) < 0.001);
+  g.flight.auto = {};
+  for (let i = 0; i < 180; i++) chase.update(1 / 60, i / 60, () => 0);
+  assert.ok(chase.fpvK < 0.001);
+  chase.startWalk(new THREE.Vector3(0, 11, 0));
+  for (let i = 0; i < 180; i++) chase.update(1 / 60, i / 60, () => 0);
+  assert.ok(chase.walkView.on && chase.cine.k === 1 && chase.fpvK < 0.001);
+});
+
+test('first-person hides neither Mage nor carpet from their shadow pass and restores visibility', async () => {
+  const { g, rider, S, advance } = standFixture(await readMage());
+  g.pipeline.overlay.add(rider.group);
+  rider.off.on = false; advance(); rider.group.visible = false;
+  let rendered = 0;
+  rider.renderer = { shadowMap: { enabled: true }, setRenderTarget() {}, render(scene) {
+    rendered++;
+    assert.equal(scene, rider.shadowScene);
+    assert.ok(rider.group.visible && S.root.visible && rider.tilt.visible);
+  } };
+  rider.renderShadow(true);
+  assert.equal(rendered, 1);
+  assert.equal(rider.group.visible, false);
+  assert.equal(rider.group.parent, g.pipeline.overlay);
+  assert.equal(rider.renderer.shadowMap.enabled, true);
+  assert.ok(S.head.isBone);
+});
+
+test('desktop entry has no touch controller or virtual joystick', () => {
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const input = readFileSync(new URL('../player/input.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(html, /id="(?:touch|stick|btnBoost|btnBrake)"/);
+  assert.doesNotMatch(input, /_bindTouch|this\.touch|maxTouchPoints/);
+});
+
 test('Mage GLB retains its real skeleton and clips, normalizes to 2.05m, faces -Z and removes held weapons', async () => {
   const gltf = await readMage();
   const weapons = ['Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff'].map((name) => {

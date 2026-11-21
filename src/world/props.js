@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shared } from '../core/ctx.js';
+import { loadTracked } from '../core/progress.js';
 import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW, SEASON } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
 
@@ -15,7 +16,7 @@ export class Props {
     const placements = await fetch(`${base}/terrain/props.json`).then((r) => r.json());
     const loader = new GLTFLoader();
     const loaded = await Promise.all(Object.keys(placements).map(async (name) => {
-      const [gltf, info] = await Promise.all([loader.loadAsync(`${base}/models/${name}.glb`), fetch(`${base}/models/${name}.json`).then((r) => r.json())]);
+      const [gltf, info] = await Promise.all([loadTracked(loader, `${base}/models/${name}.glb`), fetch(`${base}/models/${name}.json`).then((r) => r.json())]);
       return { name, gltf, info, list: placements[name] };
     }));
     return new Props(loaded);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadTracked } from '../core/progress.js';
 import { FIRST_ORDER, atCounter } from './quest.js';
 import { probeGround, moveGround, bodyClear, WALK } from './ground.js';
 
@@ -121,7 +122,7 @@ export class DeliveryNPCs {
     const loader = new GLTFLoader();
     this.ready = Promise.all(RESIDENTS.map(async (spec) => {
       try {
-        const actor = new Resident(spec, await loader.loadAsync(`./assets/models/npcs/${spec.model}`));
+        const actor = new Resident(spec, await loadTracked(loader, `./assets/models/npcs/${spec.model}`));
         this.addLabel(actor);
         this.group.add(actor.group);
         this.actors.push(actor);
