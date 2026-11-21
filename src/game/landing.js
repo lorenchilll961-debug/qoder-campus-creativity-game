@@ -20,12 +20,12 @@
 // rest of the way on to the mark (`spot`); it waits for her at `away`, tail just off the wall,
 // facing out. On an open pad all three are the middle of it.
 //
-// The standing rider is a model of its own (rider.standing, from rider_stand.glb). Until there is
+// The standing rider is a model of its own (rider.standing). Until there is
 // one she stays on the broom and sets it down on its bristles, nose in the air.
 import * as THREE from 'three';
 import { planApproach, APPROACH } from './approach.js';
 import { SPEEDS } from '../player/flight.js';
-import { WALK, probeGround, moveGround, groundAnchor, groundFailure, airClear, bodyClear } from './ground.js';
+import { WALK, JUMP, walkVector, probeGround, moveGround, moveJump, groundAnchor, groundFailure, airClear, bodyClear } from './ground.js';
 import { puff, dustRing, twinkle, PALE } from './sparks.js';
 
 const TAU = Math.PI * 2;
@@ -299,9 +299,19 @@ export class Landing {
     return true;
   }
 
+  jump() {
+    const w = this.walk;
+    if (this.state !== 'landed' || !w || w.jump.on) return false;
+    if (!bodyClear(this._env(), w.pos.x, w.pos.y, w.pos.z, WALK.height + 0.08)) { this._fail('clearance'); return false; }
+    w.jump = { y: w.pos.y, velocity: JUMP.speed, on: true };
+    this.game.rider.airborne = true;
+    return true;
+  }
+
   /** Get back on and go. */
   takeoff() {
     if (this.state !== 'landed') return false;
+    if (this.walk?.jump.on) { this._fail('airborne', '请先落地，再按 G 坐上魔毯'); return false; }
     if (this.pad.kind === 'ground' || this.walk?.moved) {
       const env = this._env(), pos = this.walk.pos;
       const support = probeGround(env, pos.x, pos.z, { referenceY: pos.y });
@@ -343,7 +353,7 @@ export class Landing {
     }
     r.seat.hop = 0; r.seat.sy = 1; r.seat.calm = 0;
     r.off.on = false; r.off.y = 0; r.off.sy = 1;
-    r.walkSpeed = 0;
+    r.walkSpeed = 0; r.walkFast = false; r.airborne = false;
     this.walk = null; this.departPad = null;
     if (g.input) g.input.walking = false;
     g.chase.stopWalk();
@@ -508,7 +518,8 @@ export class Landing {
     if (t >= L.T_OFF) {
       this._set('landed');
       if (stand) {
-        this.walk = { pos: { x: S.x, y: pad.pos.y, z: S.z }, moved: false, notice: 0 };
+        this.walk = { pos: { x: S.x, y: pad.pos.y, z: S.z }, moved: false, notice: 0,
+          velocity: { x: 0, z: 0 }, jump: { y: pad.pos.y, velocity: 0, on: false } };
         this.game.chase.startWalk(this.focus);
         if (g.input) { g.input.walking = true; g.input.stickX = 0; g.input.stickY = 0; }
       }
@@ -519,20 +530,40 @@ export class Landing {
     const g = this.game, w = this.walk, ctl = this.controls;
     if (w && this.stand) {
       const heading = g.chase.lookWalk(ctl?.lookX || 0, ctl?.lookY || 0);
-      const axes = { x: ctl?.walkX || 0, z: ctl?.walkZ || 0 };
-      const previous = w.pos;
-      // An idle authored pad can override the coarse wall grid; walking out cannot.
-      const move = axes.x || axes.z ? moveGround(this._env(), previous, axes, heading, dt, ctl?.walkFast) : null;
-      g.rider.walkSpeed = move ? move.travelled / Math.max(dt, 1e-4) : 0;
-      w.notice = Math.max(0, w.notice - dt);
-      if (move?.blocked && !w.notice) { this._fail(move.blocked.code); w.notice = 1.8; }
-      if (move && move.travelled > 1e-6) {
-        w.pos = move.pos; w.moved = true;
-        const facing = Math.atan2(w.pos.x - previous.x, previous.z - w.pos.z);
-        this.yaw += turn(facing - this.yaw) * (1 - Math.exp(-dt * 14));
+      const dir = walkVector(ctl?.walkX || 0, ctl?.walkZ || 0, heading);
+      const moving = Math.hypot(dir.x, dir.z) > 0.01;
+      const env = this._env(), n = Math.max(1, Math.ceil(dt * 120)), h = dt / n;
+      let travelled = 0, blocked = null;
+      for (let i = 0; i < n; i++) {
+        let speed = ctl?.walkFast ? WALK.fast : WALK.speed;
+        if (moving) {
+          const angle = turn(Math.atan2(dir.x, -dir.z) - this.yaw);
+          this.yaw += angle * (1 - Math.exp(-h * 10));
+          speed *= Math.max(0.2, Math.cos(angle));
+        }
+        const rate = moving ? 10 : 16, blend = 1 - Math.exp(-rate * h);
+        const vx = dir.x * speed, vz = dir.z * speed;
+        const dx = vx * h + (w.velocity.x - vx) * blend / rate;
+        const dz = vz * h + (w.velocity.z - vz) * blend / rate;
+        w.velocity.x += (vx - w.velocity.x) * blend;
+        w.velocity.z += (vz - w.velocity.z) * blend;
+        if (Math.hypot(dx, dz) > 1e-6) {
+          const move = moveGround(env, w.pos, { x: dx / (WALK.fast * h), z: dz / (WALK.fast * h) }, 0, h, true,
+            w.jump.on ? Math.max(0, w.jump.y - w.pos.y) : 0);
+          w.pos = move.pos; travelled += move.travelled;
+          if (move.blocked) { blocked = move.blocked; w.velocity.x = w.velocity.z = 0; }
+          if (move.travelled > 0) w.moved = true;
+        }
+        if (w.jump.on) w.jump = moveJump(env, w.pos, w.jump, h);
       }
-      this.spot.set(w.pos.x, w.pos.y + this.rest, w.pos.z);
-      this.focus.set(w.pos.x, w.pos.y + 1.15, w.pos.z);
+      g.rider.walkSpeed = travelled / Math.max(dt, 1e-4);
+      g.rider.walkFast = g.rider.walkSpeed > WALK.speed * 1.2;
+      g.rider.airborne = w.jump.on;
+      w.notice = Math.max(0, w.notice - dt);
+      if (blocked && !w.notice) { this._fail(blocked.code); w.notice = 1.8; }
+      const footY = w.jump.on ? w.jump.y : w.pos.y;
+      this.spot.set(w.pos.x, footY + this.rest, w.pos.z);
+      this.focus.set(w.pos.x, footY + 1.15, w.pos.z);
       this._move(f, this.spot.x, this.spot.y, this.spot.z, dt);
       f.yaw = this.yaw; f.roll = this.roll = 0; f.pitch = this.pitch = 0;
     } else {
@@ -641,7 +672,7 @@ export class Landing {
     const stand = this.stand && !!r.standing;
     seat.hop = 0; seat.sy = 1; seat.calm = 0;
     off.on = false; off.y = 0; off.sy = 1;
-    const footY = this.departPad?.pos.y ?? this.walk?.pos.y ?? this.pad?.pos.y;
+    const footY = this.departPad?.pos.y ?? (this.walk?.jump.on ? this.walk.jump.y : this.walk?.pos.y) ?? this.pad?.pos.y;
     const floorY = footY === undefined ? 0 : footY - g.flight.pos.y;   // current feet, not the original pad
     if (this.state === 'dismount') {
       // crouch, spring up, fall, land

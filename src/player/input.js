@@ -50,6 +50,7 @@ export class Input {
 
   /** A tap of the brake at time t (ms): the second of two close together is a double tap. */
   _tapBrake(t) {
+    if (this.walking) { this._tap = -1e9; return; }
     if (t - this._tap < DOUBLE_TAP) { this.pressed.add('Space2'); this._tap = -1e9; } else this._tap = t;
   }
 
