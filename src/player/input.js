@@ -34,7 +34,7 @@ export class Input {
       if (this.enabled && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => this.clear());
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
     canvas.addEventListener('click', () => { if (this.enabled && !this.locked) canvas.requestPointerLock?.()?.catch?.(() => {}); });
     window.addEventListener('mousemove', (e) => {
@@ -52,6 +52,14 @@ export class Input {
   _tapBrake(t) {
     if (this.walking) { this._tap = -1e9; return; }
     if (t - this._tap < DOUBLE_TAP) { this.pressed.add('Space2'); this._tap = -1e9; } else this._tap = t;
+  }
+
+  clear() {
+    this.keys.clear(); this.pressed.clear();
+    this.stickX = this.stickY = this.turn = this.pitch = 0;
+    this.walkX = this.walkZ = this.lookX = this.lookY = this._lookX = this._lookY = 0;
+    this.boost = this.brake = this.mouseBoost = this.mouseBrake = this.walkFast = false;
+    this._tap = -1e9;
   }
 
   take(code) {

@@ -11,6 +11,7 @@ export class Hud {
       job: $('job'), jobName: $('jobName'), jobSpot: $('jobSpot'), jobDist: $('jobDist'), jobCount: $('jobCount'), jobArrow: $('jobCompass')?.firstElementChild,
       prompt: $('prompt'), card: $('card'), cardKicker: $('cardKicker'), cardName: $('cardName'), cardSub: $('cardSub'),
       trick: $('trick'), keys: $('keys'),
+      jobStatus: $('jobStatus'), jobObjective: $('jobObjective'), jobCoins: $('jobCoins'), jobCompass: $('jobCompass'),
     };
     this._prompt = null;
     this._cardT = 0;
@@ -31,6 +32,14 @@ export class Hud {
     e.job.classList.remove('fresh');
     void e.job.offsetWidth;
     e.job.classList.add('fresh');
+  }
+
+  order(status, coins, objective) {
+    const e = this.el;
+    if (e.jobStatus) e.jobStatus.textContent = { available: '新手委托 · 等待接单', active: '配送中 · 携带新焙春茶', completed: '新手委托 · 已完成' }[status];
+    if (e.jobObjective && e.jobObjective.textContent !== objective) e.jobObjective.textContent = objective;
+    if (e.jobCoins) e.jobCoins.textContent = coins;
+    if (e.jobCompass) e.jobCompass.hidden = status === 'completed';
   }
 
   /** Distance and bearing (radians, relative to the way she is heading) to where the parcel is going. */

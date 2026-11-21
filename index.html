@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="./src/ui/style.css">
 <link rel="stylesheet" href="./src/ui/journal.css">
+<link rel="stylesheet" href="./src/ui/delivery.css">
+<link rel="stylesheet" href="./src/ui/world-map.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three/build/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
 </script>
@@ -29,9 +31,12 @@
   </div>
   <div class="hud-br"><span id="speed">0</span><small>km/h</small></div>
   <div class="hud-tr" id="job" hidden>
-    <div class="job-kicker"><span class="job-icon"></span>包裹送往</div>
+    <div class="job-kicker"><span class="job-icon"></span><span id="jobStatus">新手委托 · 等待接单</span></div>
     <div class="job-name"><span id="jobName"></span><span class="job-spot" id="jobSpot"></span></div>
     <div class="job-meta"><span class="compass" id="jobCompass" title="包裹的去向"><svg viewBox="-12 -12 24 24" width="22" height="22"><path d="M0 -9 L5 6 L0 3 L-5 6 Z" fill="currentColor"/></svg><span id="jobDist"></span></span><span class="job-count">已送 <span id="jobCount">0</span> 单</span></div>
+    <p class="job-objective" id="jobObjective" aria-live="polite">按 M 看地图，前往信使公会接单。</p>
+    <div class="job-wallet">风铃币 <span id="jobCoins">0</span> · 首单报酬 30</div>
+    <button type="button" class="delivery-map-button" id="openWorldMap">M 世界地图</button>
   </div>
   <section class="season-panel" id="seasonPanel" aria-label="四季与节气环境切换">
     <div class="season-heading"><span>四时流转</span><span class="season-stage">环境试玩</span></div>
@@ -90,7 +95,8 @@
       <div><kbd>G</kbd> 脚下安全地面 / 屋顶落地</div>
       <div>落地后 <kbd>WASD</kbd> 步行 · <kbd>Shift</kbd> 奔跑 · 鼠标环顾 · <kbd>Space</kbd> 跳跃 · <kbd>G</kbd> 起飞</div>
       <div><kbd>鼠标</kbd> 转向 · <kbd>C</kbd> 视角 · <kbd>I</kbd> 反转俯仰</div>
-      <div><kbd>P</kbd> 隐藏界面 · <kbd>M</kbd> 静音 · <kbd>J</kbd> 手记</div>
+      <div><kbd>M</kbd> 世界地图 · <kbd>E</kbd> 接单 / 交货 · <kbd>N</kbd> 静音</div>
+      <div><kbd>P</kbd> 隐藏界面 · <kbd>J</kbd> 手记</div>
       <div><kbd>1–4</kbd> 四季快捷 · 面板选择二十四节气 · 夏季恢复原景</div>
       <div>魔毯素材：<a href="https://poly.pizza/m/b5etBd2ELng" target="_blank" rel="noopener noreferrer">Anna M · Poly Pizza</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a> · 已调整尺寸与动态</div>
     </div>

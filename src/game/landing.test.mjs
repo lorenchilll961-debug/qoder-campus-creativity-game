@@ -122,7 +122,7 @@ test('G or airborne Space2 lands; walking Space jumps, Space2 cannot take off, a
   }
 });
 
-test('double Space in a zone keeps the authored pad and delivers only once at touchdown', () => {
+test('double Space keeps the authored pad and notifies arrival once without automatic delivery', () => {
   const special = pad(), { g, L, gameplay, pressed } = fixture([special]);
   let arrivals = 0;
   const arrive = gameplay.courier.arrive.bind(gameplay.courier);
@@ -136,7 +136,8 @@ test('double Space in a zone keeps the authored pad and delivers only once at to
   until(g, L, 'landed');
   for (let i = 0; i < 120; i++) tick(g, L, { ...idle, walkX: 1 });
   assert.equal(arrivals, 1);
-  assert.equal(gameplay.courier.count, 1);
+  assert.equal(gameplay.courier.count, 0);
+  assert.equal(gameplay.courier.quest.status, 'available');
   assert.equal(special.pos.x, 0);
 });
 
