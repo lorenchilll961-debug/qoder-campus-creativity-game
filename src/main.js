@@ -172,7 +172,7 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
-  game.gameplay.attachUi();
+  await game.gameplay.attachUi();
   game.weather = new SeasonWeather(game);
 
   resize();
@@ -237,6 +237,7 @@ function frame(now) {
   last = now;
   autoScale(raw);
   if (!game.paused) step(dt);
+  else if (game.gameplay.courier.dialogue?.modal.isOpen) game.gameplay.courier.npcs?.animateDialogue(dt);
   render(dt);
 }
 

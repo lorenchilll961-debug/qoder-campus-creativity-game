@@ -24,40 +24,47 @@ export class Courier {
 
   attachUi() {
     this.dialogue = new Dialogue(this.game);
-    this.npcs = new DeliveryNPCs(this.game.pipeline.overlay);
-    this.npcs.setPads(this.pickup, this.destination);
+    this.npcs = new DeliveryNPCs(this.game);
+    this.npcs.setPads(this.pads);
+    return this.npcs.ready;
   }
 
   setPads(pads) {
     this.pickup = pads.find((p) => p.id === FIRST_ORDER.pickup) || null;
     this.destination = pads.find((p) => p.id === FIRST_ORDER.destination) || null;
-    this.npcs?.setPads(this.pickup, this.destination);
+    this.pads = pads;
+    this.npcs?.setPads(pads);
     this._show();
   }
 
   start() {
     if (this.quest.progress.intro || !this.dialogue || !this.target) return;
     if (this.dialogue.show('欢迎成为云雀港信使',
-      '你的第一单，是把公会的新焙春茶送到露台茶馆。\n\n扫帚会自动前进：A / D 转向，W 俯冲、S 爬升，按住空格减速，Shift 加速。\n按 M 看地图，循金光找到信使公会。靠近回廊后连按两次空格降落，按 E 与阿岚交谈。',
+      '你的第一单，是帮商店老板阿岚，把新焙春茶送给露台茶馆的村民老林。\n\n扫帚会自动前进：A / D 转向，W 俯冲、S 爬升，按住空格减速，Shift 加速。\n按 M 看地图，循金光找到信使公会。靠近回廊后连按两次空格降落，按 E 与阿岚交谈。',
       [{ label: '开始第一单' }])) this.quest.learn('intro');
   }
 
   mapOpened() { this.quest.learn('map'); }
 
-  near(pad) { return atCounter(this.game.gameplay.landing, this.game.flight, pad); }
+  near(pad) { return this.npcs ? this.npcs.inReach(pad) : atCounter(this.game.gameplay.landing, this.game.flight, pad); }
 
   nearby() {
+    if (this.npcs) return this.npcs.nearby();
     return [this.pickup, this.destination].find((pad) => this.near(pad)) || null;
   }
 
   interact() {
     const g = this.game, q = this.quest, pad = this.nearby();
     if (g.state !== 'play' || g.paused || !pad || !this.dialogue) return false;
+    this.npcs?.facePlayer(pad);
+    const actor = this.npcs?.actorFor(pad);
+    if (actor?.spec.role === 'wizard') return this.dialogue.show(actor.spec.name,
+      '风向会随节气转变，顺风起飞更省力。观星者之塔是我散步看云的地方。\n\n阿岚在信使公会的补给商店等人送茶，老林在露台茶馆收货。按 M 查看配送目标；落稳后走近居民，按 E 交谈。');
     if (pad === this.pickup) {
       if (q.status === 'available') {
         if (!this.destination) return false;
         return this.dialogue.show(FIRST_ORDER.sender,
-          `茶馆的林婆婆在等这包新茶。请把它送到露台茶馆的屋顶露台，不是楼下街道。\n\n报酬：${FIRST_ORDER.reward} 枚风铃币，并补满风势。接单后按空格骑上扫帚，再用 M 查看目标。`,
+          `茶馆的老林在等这包新茶。请把它送到露台茶馆的屋顶露台，不是楼下街道。\n\n报酬：${FIRST_ORDER.reward} 枚风铃币，并补满风势。接单后按空格骑上扫帚，再用 M 查看目标。`,
           [{ label: '接下春茶订单', run: () => this.accept(pad) }, { label: '稍后再来' }]);
       }
       return this.dialogue.show(FIRST_ORDER.sender, q.carrying
@@ -81,7 +88,7 @@ export class Courier {
   }
 
   arrive(pad) {
-    if (pad === this.target) this.game.toast?.('已抵达，请等落稳后按 E 交谈');
+    if (pad === this.target) this.game.toast?.('已抵达，落稳后走近居民，按 E 交谈');
     else this.game.flight.gust = Math.min(1, this.game.flight.gust + 0.35);
     return false;
   }
@@ -102,6 +109,7 @@ export class Courier {
   _show() {
     const t = this.target;
     this.hud.job(t?.name || (this.quest.status === 'completed' ? '春茶已送达' : null), t?.spot || '', this.count);
+    if (this.game.gameplay) this.hud.order(this.quest.status, this.quest.coins, this.objective());
     this._acc = 1;
   }
 
@@ -109,10 +117,10 @@ export class Courier {
     const q = this.quest, L = this.game.gameplay?.landing;
     if (q.status === 'completed') return '第一单完成！空格起飞，继续探索海岛。M 随时查看世界地图。';
     if (!this.target) return '配送点暂不可用，仍可自由飞行与探索。';
-    if (this.near(this.target)) return q.carrying ? '已到屋顶露台，按 E 与林婆婆交谈并交付春茶。' : '按 E 与阿岚交谈，确认接下第一单。';
+    if (this.near(this.target)) return q.carrying ? '已到屋顶露台，按 E 与老林交谈并交付春茶。' : '按 E 与阿岚交谈，确认接下第一单。';
     if (!q.progress.map) return '新手引导 · 按 M 查看地图，金色标记就是当前目标。';
     if (L.landed) return '落地后 WASD 步行，鼠标环顾；按空格骑上扫帚，向金色目标飞去。';
-    if (L.busy) return '正在安全降落，请稍候。落稳后按 E 与接待员交谈。';
+    if (L.busy) return '正在安全降落，请稍候。落稳后走近居民，按 E 交谈。';
     if (!q.progress.move) return '飞行练习 · A / D 转向，W 俯冲、S 爬升，按住空格减速。';
     return q.carrying
       ? '飞往露台茶馆。靠近金光后双击空格降落，落稳后 E 交货。'
@@ -121,7 +129,7 @@ export class Courier {
 
   update(dt, ctl) {
     const g = this.game, f = g.flight, L = g.gameplay.landing;
-    this.npcs?.update(f.pos);
+    this.npcs?.update(dt);
     if (g.state !== 'play') return;
     if (!L.busy && (Math.abs(ctl.turn) > 0.1 || Math.abs(ctl.pitch) > 0.1)) {
       this._moving += dt;

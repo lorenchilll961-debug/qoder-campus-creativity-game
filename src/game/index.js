@@ -60,8 +60,8 @@ export class Gameplay {
     this._loadStand();
   }
 
-  attachUi() {
-    this.courier.attachUi();
+  async attachUi() {
+    await this.courier.attachUi();
     this.map = new WorldMap(this.game, this.courier);
     document.getElementById('openWorldMap').addEventListener('click', () => this.map.open());
   }
@@ -138,7 +138,7 @@ export class Gameplay {
       else if (L.state === 'fly' && this.zone) html = `<kbd>Space</kbd><span class="x2">×2</span> 降落<em>${esc(this.zone.name)}</em> · <kbd>G</kbd> 脚下落地`;
       else if (L.state === 'fly') html = '<kbd>G</kbd> 脚下落地 · 或双击 <kbd>Space</kbd>';
     }
-    if (play && L.landed && this.courier.nearby()) html = `<kbd>E</kbd> 与接待员交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>Space</kbd> 起飞`;
+    if (play && L.landed && this.courier.nearby()) html = `按 <kbd>E</kbd> 交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>Space</kbd> 起飞`;
     this.hud.prompt(html);
   }
 
