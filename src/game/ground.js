@@ -1,5 +1,6 @@
 // Height fields cannot resolve tunnels or stacked floors, so only the highest support is safe.
-export const WALK = Object.freeze({ radius: 0.32, height: 2.1, step: 0.26, drop: 0.32, slope: 0.65, stride: 0.2, speed: 2.2, fast: 3.8 });
+export const WALK = Object.freeze({ radius: 0.32, height: 2.1, step: 0.26, drop: 0.32, slope: 0.65, stride: 0.2, speed: 1.2, fast: 2.8 });
+export const JUMP = Object.freeze({ speed: 5.2, gravity: 16 });
 const EPS = 1e-5;
 const REASONS = {
   support: '脚下没有可靠支撑，请换一处落地', water: '水面不能落地或步行',
@@ -66,7 +67,7 @@ export function walkVector(x, z, yaw) {
 }
 
 /** No input or world object is mutated. Each swept step is <= 20cm, at every frame rate. */
-export function moveGround(env, pos, axes, yaw, dt, fast = false) {
+export function moveGround(env, pos, axes, yaw, dt, fast = false, lift = 0) {
   const dir = walkVector(axes.x || 0, axes.z || 0, yaw);
   const distance = Math.max(0, dt) * (fast ? WALK.fast : WALK.speed);
   const dx = dir.x * distance, dz = dir.z * distance;
@@ -75,10 +76,27 @@ export function moveGround(env, pos, axes, yaw, dt, fast = false) {
   for (let i = 0; i < n; i++) {
     const result = probeGround(env, current.x + dx / n, current.z + dz / n, { referenceY: current.y });
     if (!result.ok) { blocked = result; break; }
+    if (lift > 0 && !bodyClear(env, result.pos.x, result.pos.y, result.pos.z, WALK.height + lift)) {
+      blocked = groundFailure('clearance'); break;
+    }
     travelled += Math.hypot(result.pos.x - current.x, result.pos.z - current.z);
     current = result.pos;
   }
   return { pos: current, travelled, blocked };
+}
+
+export function moveJump(env, pos, jump, dt) {
+  let { y, velocity, on } = jump;
+  const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+  for (let i = 0; i < n && on; i++) {
+    const next = Math.max(pos.y, y + velocity * h - JUMP.gravity * h * h / 2);
+    if (bodyClear(env, pos.x, Math.min(y, next), pos.z, WALK.height + Math.abs(next - y))) {
+      y = next;
+      velocity -= JUMP.gravity * h;
+    } else velocity = Math.min(0, velocity);
+    if (y <= pos.y) { y = pos.y; velocity = 0; on = false; }
+  }
+  return { y, velocity, on };
 }
 
 /** A private anchor: deliberately not `pad.ground`, which already means a special town pad. */

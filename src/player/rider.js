@@ -3,7 +3,7 @@
 //
 // Two poses beyond plain riding, both driven from outside (game/landing.js, game/tricks.js):
 //   seat - the seated model lifted, squashed or rolled about the broom (hops, the kickflip);
-//   off  - dismounted: a second model of her standing (rider_stand.glb, optional) takes its place.
+//   off  - dismounted: the animated Mage takes the broom rider's place.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { U } from '../core/ctx.js';
@@ -11,21 +11,8 @@ import { U } from '../core/ctx.js';
 const SCALE = 1.28;
 const SHADOW_SIZE = 1024;
 const SHADOW_EXTENT = 3.4; // half-width of the shadow box in metres
-const STAND_HEIGHT = 2.05; // boots to hat tip, if the standing model does not say how big it is
-
-// The single-mesh model has no skeleton; isolate its boots without bending the held broom.
-export function standLegWeight(x, y, z, info = {}, height = info.height || 1.6087) {
-  const feet = info.feet || { left: [-0.072 * height, 0, 0], right: [0.072 * height, 0, 0] };
-  const foot = x < 0 ? feet.left : feet.right;
-  const fy = (y - foot[1]) / height;
-  if (fy < -0.01 || fy > 0.35) return 0;
-  if (info.broomBase && Math.hypot(x - info.broomBase[0], z - info.broomBase[2]) < 0.115 * height) return 0;
-  const smooth = (v) => { const t = Math.max(0, Math.min(1, v)); return t * t * (3 - 2 * t); };
-  const width = 1 - smooth((Math.abs(x - foot[0]) / height - 0.048) / 0.028);
-  const depth = 1 - smooth((Math.abs(z - foot[2]) / height - 0.075) / 0.035);
-  const hip = 1 - smooth((fy - 0.18) / 0.17);
-  return (x < 0 ? -1 : 1) * width * depth * hip;
-}
+const STAND_HEIGHT = 2.05;
+const STAND_CLIPS = { Idle: 'Idle', Walk: 'Walking_A', Run: 'Running_A', Jump: 'Jump_Idle' };
 
 export class Rider {
   static async load(renderer, base = './assets/models') {
@@ -57,7 +44,8 @@ export class Rider {
     this.off = { on: false, y: 0, sy: 1 };
     this.standing = null;                // { root, model, height } once the standing model is in
     this.walkSpeed = 0;
-    this.walkPhase = 0;
+    this.walkFast = false;
+    this.airborne = false;
     this.meshes = [];
     model.traverse((o) => {
       if (!o.isMesh) return;
@@ -165,107 +153,80 @@ export class Rider {
     return -min;
   }
 
-  /**
-   * The same character on her feet, for when she has landed. Optional: without it she stays on
-   * the broom and sets it down. Same conventions as rider.glb (one mesh, _wind weights, facing
-   * -z) except that the origin is on the floor between her boots.
-   */
-  async loadStand(base = './assets/models', name = 'rider_stand') {
-    const [gltf, info] = await Promise.all([
-      new GLTFLoader().loadAsync(`${base}/${name}.glb`),
-      fetch(`${base}/${name}.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
-    ]);
-    return this.setStand(gltf.scene, info);
+  async loadStand(base = './assets/models/characters') {
+    const gltf = await new GLTFLoader().loadAsync(`${base}/Mage.glb`);
+    return this.setStand(gltf.scene, gltf.animations);
   }
 
-  setStand(model, info = {}) {
-    if (this.standing) this.group.remove(this.standing.root);
-    const root = new THREE.Group();
-    // (rider_stand.json keeps the seated model's units, and its "scale" is a record of how it got them)
-    model.scale.setScalar(typeof info.scale === 'number' ? info.scale : SCALE);
-    model.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(model);
-    let height = box.max.y - box.min.y;
-    // a model that did not keep to the seated one's scale is brought to a sensible height
-    if (!(height > 1.3 && height < 2.9)) {
-      model.scale.multiplyScalar(STAND_HEIGHT / height);
-      model.updateMatrixWorld(true);
-      box.setFromObject(model);
-      height = box.max.y - box.min.y;
+  setStand(model, clips) {
+    const root = new THREE.Group(), mixer = new THREE.AnimationMixer(model), actions = {};
+    for (const [state, name] of Object.entries(STAND_CLIPS)) {
+      const clip = THREE.AnimationClip.findByName(clips, name);
+      if (!clip) throw new Error(`Mage animation missing: ${name}`);
+      actions[state] = mixer.clipAction(clip);
     }
-    model.position.y -= box.min.y;        // boots on the floor, wherever the origin was left
+    for (const name of ['Spellbook', 'Spellbook_open', '1H_Wand', '2H_Staff']) model.getObjectByName(name)?.removeFromParent();
+    actions.Idle.play();
+    mixer.update(0);
+    model.rotation.y = Math.PI;
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model, true);
+    const scale = STAND_HEIGHT / (box.max.y - box.min.y);
+    model.scale.setScalar(scale);
+    model.position.y = -box.min.y * scale;
     root.add(model);
     root.visible = false;
-    const u = {
-      uRiderTime: this.uniforms.uRiderTime,
-      uRiderWind: { value: 0.5 },
-      uLanternPivot: { value: new THREE.Vector3().fromArray(info.lanternPivot || [0, 1e3, 0]) },
-      uLantern: { value: new THREE.Vector2() },
-    };
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.frustumCulled = false;
       o.castShadow = true;
       o.receiveShadow = true;
-      const m = o.material;
-      m.envMapIntensity = 1.0;
-      m.normalScale?.set(1, 1);
-      if (m.map) m.map.anisotropy = 8;
-      this._patch(m, !!o.geometry.attributes._wind, u);
+      o.material.envMapIntensity = 1;
+      if (o.material.map) o.material.map.anisotropy = 8;
     });
+    if (this.standing) {
+      this.standing.mixer.stopAllAction();
+      this.standing.mixer.uncacheRoot(this.standing.model);
+      this.group.remove(this.standing.root);
+    }
     this.group.add(root);
-    this.standing = { root, model, height, uniforms: u, legs: this._standLegs(model, info, height / model.scale.y) };
+    // Planted-sole speeds measured from the bundled in-place clips, before scaling.
+    this.standing = { root, model, height: STAND_HEIGHT, mixer, actions, state: 'Idle',
+      legs: ['Mage_LegLeft', 'Mage_LegRight'].map((name) => model.getObjectByName(name)),
+      footBox: new THREE.Box3(), stride: { Walk: 0.74 * scale, Run: 4.4 * scale } };
     return this.standing;
   }
 
-  _standLegs(model, info, height) {
-    model.updateWorldMatrix(true, true);
-    const inverse = model.matrixWorld.clone().invert(), v = new THREE.Vector3(), normal = new THREE.Vector3(), legs = [];
-    model.traverse((mesh) => {
-      if (!mesh.isMesh) return;
-      mesh.geometry = mesh.geometry.clone();
-      const geometry = mesh.geometry, p = geometry.attributes.position, n = geometry.attributes.normal;
-      p.setUsage(THREE.DynamicDrawUsage);
-      n?.setUsage(THREE.DynamicDrawUsage);
-      const local = inverse.clone().multiply(mesh.matrixWorld), back = local.clone().invert();
-      const normalLocal = new THREE.Matrix3().getNormalMatrix(local), normalBack = normalLocal.clone().invert();
-      const vertices = [];
-      for (let i = 0; i < p.count; i++) {
-        v.fromBufferAttribute(p, i).applyMatrix4(local);
-        const weight = standLegWeight(v.x, v.y, v.z, info, height);
-        if (Math.abs(weight) < 0.001) continue;
-        if (n) normal.fromBufferAttribute(n, i).applyMatrix3(normalLocal).normalize();
-        vertices.push({ i, weight, y: v.y - height * 0.35, z: v.z, nx: normal.x, ny: normal.y, nz: normal.z });
-      }
-      legs.push({ p, n, base: p.array.slice(), normals: n?.array.slice(), back: back.elements, normalBack, vertices, height, active: false });
-    });
-    return legs;
-  }
-
-  _gait(S, amplitude, phase) {
-    const normal = this._v;
-    for (const leg of S.legs) {
-      if (!amplitude && !leg.active) continue;
-      const { p, n, base, normals, back: e } = leg;
-      for (const v of leg.vertices) {
-        const j = v.i * 3, w = Math.abs(v.weight), swing = Math.sin(phase) * Math.sign(v.weight);
-        const a = swing * 0.22 * amplitude, c = Math.cos(a), s = Math.sin(a);
-        const dy = ((c - 1) * v.y - s * v.z + Math.max(0, swing) * 0.012 * leg.height * amplitude) * w;
-        const dz = (s * v.y + (c - 1) * v.z) * w;
-        p.setXYZ(v.i, base[j] + e[4] * dy + e[8] * dz, base[j + 1] + e[5] * dy + e[9] * dz, base[j + 2] + e[6] * dy + e[10] * dz);
-        if (n) {
-          if (!amplitude) n.setXYZ(v.i, normals[j], normals[j + 1], normals[j + 2]);
-          else {
-            normal.set(v.nx, v.ny + ((c - 1) * v.ny - s * v.nz) * w, v.nz + (s * v.ny + (c - 1) * v.nz) * w)
-              .applyMatrix3(leg.normalBack).normalize();
-            n.setXYZ(v.i, normal.x, normal.y, normal.z);
-          }
-        }
-      }
-      p.needsUpdate = true;
-      if (n) n.needsUpdate = true;
-      leg.active = amplitude > 0;
+  _animateStand(dt, flight, terrain) {
+    const S = this.standing, o = this.off;
+    S.root.visible = o.on;
+    this.tilt.visible = !o.on;
+    const state = !o.on ? 'Idle' : this.airborne ? 'Jump' : this.walkSpeed < 0.04 ? 'Idle' : this.walkFast ? 'Run' : 'Walk';
+    if (state !== S.state) {
+      const previous = S.actions[S.state], next = S.actions[state];
+      next.reset().setEffectiveWeight(1).play();
+      previous.crossFadeTo(next, 0.18, false);
+      S.state = state;
     }
+    if (!o.on) return;
+    for (const name of ['Walk', 'Run']) S.actions[name].setEffectiveTimeScale(this.walkSpeed / S.stride[name]);
+    S.mixer.update(dt);
+    S.root.position.set(0, o.y, 0);
+    const wide = 1 / Math.sqrt(o.sy);
+    S.root.scale.set(wide, o.sy, wide);
+    if (this.airborne || o.sy !== 1) return;
+    this.group.updateMatrixWorld(true);
+    let correction = -Infinity;
+    for (const mesh of S.legs) {
+      mesh.computeBoundingBox();
+      const box = S.footBox.copy(mesh.boundingBox).applyMatrix4(mesh.matrixWorld);
+      for (const x of [box.min.x, box.max.x]) for (const z of [box.min.z, box.max.z]) {
+        const surface = Math.max(terrain.heightAt(x, z), flight.solid?.heightAt(x, z) ?? -Infinity);
+        correction = Math.max(correction, surface - box.min.y);
+      }
+    }
+    // Running has an authored aerial phase; only walking pins the lowest sole to the support.
+    S.root.position.y += THREE.MathUtils.clamp(correction, state === 'Run' ? 0 : -0.06, 0.16);
   }
 
   /** @param flight Flight state. */
@@ -286,28 +247,8 @@ export class Rider {
     const wide = st.sy === 1 ? 1 : 1 / Math.sqrt(st.sy);
     this.tilt.scale.set(wide, st.sy, wide);
 
-    // on her feet: the standing model takes the seated one's place
-    const S = this.standing, o = this.off;
-    if (S) {
-      const on = o.on;
-      const walking = on && this.walkSpeed > 0.01;
-      const gait = walking ? Math.min(1, this.walkSpeed / 2.2) : 0;
-      if (walking) this.walkPhase = (this.walkPhase + dt * this.walkSpeed * 5.2) % (Math.PI * 2);
-      else this.walkPhase = 0;
-      this._gait(S, gait, this.walkPhase);
-      S.root.visible = on;
-      this.tilt.visible = !on;
-      if (on) {
-        // a little life while she waits: breathing, and a slow shift of her weight
-        const sy = o.sy * (1 + 0.006 * Math.sin(time * 1.7)), w = 1 / Math.sqrt(sy);
-        S.root.position.set(0, o.y + Math.abs(Math.sin(this.walkPhase)) * 0.022 * gait, 0);
-        S.root.scale.set(w, sy, w);
-        S.root.rotation.set(Math.sin(time * 0.53 + 0.4) * 0.008 + gait * 0.035, 0,
-          Math.sin(time * 0.71) * 0.012 + Math.sin(this.walkPhase) * 0.024 * gait);
-        S.uniforms.uRiderWind.value = 0.42 + 0.22 * Math.sin(time * 0.6) * Math.sin(time * 0.23 + 1.0);
-        S.uniforms.uLantern.value.set(Math.sin(time * 1.3) * 0.05, Math.sin(time * 1.1 + 0.7) * 0.04);
-      }
-    } else this.tilt.visible = true;
+    if (this.standing) this._animateStand(dt, flight, terrain);
+    else this.tilt.visible = true;
 
     this.uniforms.uRiderTime.value = time;
     this.uniforms.uRiderWind.value = 0.35 + 0.65 * sk + flight.boosting * 0.6;

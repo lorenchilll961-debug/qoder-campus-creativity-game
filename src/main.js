@@ -172,6 +172,7 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
+  await game.gameplay.standReady;
   game.weather = new SeasonWeather(game);
 
   resize();

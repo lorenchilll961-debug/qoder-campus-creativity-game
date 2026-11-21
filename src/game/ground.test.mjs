@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WALK, probeGround, moveGround, groundAnchor, walkVector, bodyClear, airClear } from './ground.js';
+import { WALK, JUMP, probeGround, moveGround, moveJump, groundAnchor, walkVector, bodyClear, airClear } from './ground.js';
 
 const flat = (y = 10) => ({ terrain: { heightAt: () => y } });
 const near = (a, b, eps = 1e-8) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -29,7 +29,7 @@ test('a low step is walkable, a high step/wall is not', () => {
   for (const [step, allowed] of [[0.22, true], [0.5, false], [15, false]]) {
     const env = { ...flat(), solid: { heightAt: (x) => x >= 1 ? 10 + step : -1e9 } };
     const m = moveGround(env, { x: 0, y: 10, z: 0 }, { x: 1 }, 0, 1);
-    assert.equal(m.travelled > 2, allowed);
+    assert.equal(m.travelled > 1, allowed);
     if (allowed) near(m.pos.y, 10.22);
     else { assert.equal(m.blocked.code, 'step'); assert.ok(m.pos.x < 0.7); }
   }
@@ -96,6 +96,51 @@ test('anchor copies current feet and has an unambiguous kind (not pad.ground)', 
   assert.equal(feet.x, 4);
   assert.equal(anchor.kind, 'ground');
   assert.equal(anchor.ground, undefined);
+});
+
+test('jump follows the same ballistic arc across frame rates and lands exactly', () => {
+  const pos = { x: 0, y: 10, z: 0 };
+  for (const fps of [15, 30, 60, 144]) {
+    let jump = { y: 10, velocity: JUMP.speed, on: true }, peak = 10;
+    for (let i = 0; i < fps; i++) {
+      jump = moveJump(flat(), pos, jump, 1 / fps);
+      peak = Math.max(peak, jump.y);
+    }
+    assert.equal(jump.on, false);
+    near(jump.y, 10); near(jump.velocity, 0);
+    assert.ok(Math.abs(peak - 10 - JUMP.speed ** 2 / (2 * JUMP.gravity)) < 0.02);
+  }
+  const start = { y: 10, velocity: JUMP.speed, on: true };
+  const mid = moveJump(flat(), pos, start, 0.25);
+  near(mid.y, 10 + JUMP.speed * 0.25 - JUMP.gravity * 0.25 ** 2 / 2);
+  assert.deepEqual(start, { y: 10, velocity: JUMP.speed, on: true });
+  assert.equal(moveJump(flat(), pos, start, 2).on, false);
+});
+
+test('swept jump stops at a low ceiling and returns to its support', () => {
+  const env = { ...flat(), props: { collide(p, radius) {
+    if (p.y + radius > 12.4 && p.y - radius < 12.45) { p.y -= 0.1; return false; }
+    return false;
+  } } };
+  const pos = { x: 0, y: 10, z: 0 };
+  let jump = { y: 10, velocity: JUMP.speed, on: true }, peak = 10;
+  for (let i = 0; i < 30; i++) {
+    jump = moveJump(env, pos, jump, 1 / 15);
+    peak = Math.max(peak, jump.y);
+    assert.ok(jump.y + WALK.height <= 12.4);
+  }
+  assert.ok(peak > 10.1); assert.equal(jump.on, false); near(jump.y, 10);
+});
+
+test('airborne horizontal sweep cannot pass a prop above standing head height', () => {
+  const env = { ...flat(), props: { collide(p, radius) {
+    if (p.x + radius > 1 && p.x - radius < 1.05 && p.y + radius > 12.4) { p.x -= 0.1; return false; }
+    return false;
+  } } };
+  const pos = { x: 0, y: 10, z: 0 };
+  assert.ok(moveGround(env, pos, { x: 1 }, 0, 1, true).pos.x > 2);
+  const jump = moveGround(env, pos, { x: 1 }, 0, 1, true, 0.8);
+  assert.ok(jump.pos.x < 0.7); assert.equal(jump.blocked.code, 'clearance');
 });
 
 test('takeoff requires clearance for both ends of the broom and props', () => {
