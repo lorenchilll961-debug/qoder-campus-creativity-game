@@ -44,7 +44,7 @@ export class Journal {
 
   /** The journal waits for play to begin, and for the title screen to have finished fading out. */
   canOpen() {
-    if (this.game.state !== 'play') return false;
+    if (this.game.state !== 'play' || this.game.paused || this.game.modal) return false;
     const title = document.getElementById('title');
     return !title || getComputedStyle(title).visibility === 'hidden';
   }
@@ -72,8 +72,14 @@ export class Journal {
 
   /** Open or close the page. The world holds still while it is open. */
   toggle(on = !this.open) {
-    if (on === this.open) return;
+    if (on === this.open || (on && !this.canOpen())) return;
     this.open = on;
+    this.game.input?.clear();
+    if (on) {
+      this.wasEnabled = this.game.input.enabled;
+      this.game.input.enabled = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else this.game.input.enabled = this.wasEnabled;
     if (on) {
       this._fill();
       this.page.hidden = false;

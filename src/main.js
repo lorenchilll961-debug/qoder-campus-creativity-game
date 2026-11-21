@@ -172,6 +172,7 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
+  game.gameplay.attachUi();
   game.weather = new SeasonWeather(game);
 
   resize();
@@ -197,8 +198,11 @@ function start() {
   game.sound.start();
   $('title').classList.add('gone');
   $('hud').hidden = false;
+  canvas.tabIndex = -1;
+  canvas.focus({ preventScroll: true });
   // (where the lock is refused - an embedded frame, say - the keyboard still flies the broom)
-  canvas.requestPointerLock?.()?.catch?.(() => {});
+  game.gameplay.courier.start();
+  if (!game.paused) canvas.requestPointerLock?.()?.catch?.(() => {});
 }
 
 // ---------------------------------------------------------------------------------- loop
@@ -272,6 +276,7 @@ function advance(dt, ctl) {
   const t = game.time;
   const { flight, rider, chase, terrain, wake, fx, vortex } = game;
   game.gameplay.update(dt, ctl);             // may take the broom over (flight.auto) to land it
+  if (game.paused) return;
   flight.update(dt, ctl, t);
   rider.update(dt, t, flight, terrain);
   if (flight.touchdown > 0) fx.slam(flight, flight.touchdown, rider.sunVis);
@@ -332,7 +337,7 @@ function step(dt) {
     if (input.take('KeyC')) toast(`视角 · ${chase.next()}`);
     if (input.take('KeyI')) { input.invert = !input.invert; toast(input.invert ? '俯仰已反转' : '俯仰已复原'); }
     if (input.take('KeyP')) $('hud').classList.toggle('quiet');
-    if (input.take('KeyM')) toast(game.sound.toggleMute() ? '声音已静' : '声音已开');
+    if (input.take('KeyN')) toast(game.sound.toggleMute() ? '声音已静' : '声音已开');
     for (let i = 0; i < SEASONS.length; i++) {
       if (input.take(`Digit${i + 1}`)) game.seasons.select(SEASONS[i].id);
     }

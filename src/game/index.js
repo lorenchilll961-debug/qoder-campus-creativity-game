@@ -12,6 +12,7 @@ import { Landing, LAND } from './landing.js';
 import { Courier } from './courier.js';
 import { Kickflip } from './tricks.js';
 import { Hud } from './hud.js';
+import { WorldMap } from '../ui/world-map.js';
 
 /** localStorage, where there is one (private windows and embeds may refuse). */
 class Store {
@@ -41,8 +42,6 @@ export class Gameplay {
     this.beacons = null;
     this.zone = null;             // the pad that can be landed on right now
     this.hush = 0;                // seconds before a pad just left lights up again
-    this.playing = false;
-    this.intro = -1;
     this.courier = new Courier(game, this.store, this.hud);
     this.trick = new Kickflip(game, this.store, this.hud);
     this.landing = new Landing(game, {
@@ -59,6 +58,12 @@ export class Gameplay {
     game.padsNear = () => this.padsNear();
     this._bind();
     this._loadStand();
+  }
+
+  attachUi() {
+    this.courier.attachUi();
+    this.map = new WorldMap(this.game, this.courier);
+    document.getElementById('openWorldMap').addEventListener('click', () => this.map.open());
   }
 
   /** The standing rider, if the file is there (she sets the broom down and stays on it otherwise). */
@@ -114,6 +119,8 @@ export class Gameplay {
     const f = this.game.flight, L = this.landing;
     if (L.busy) return L.state === 'approach' || L.state === 'settle' ? L.pad : null;
     if (this.hush > 0) return null;
+    const target = this.courier.target;
+    if (target && Math.hypot(target.pos.x - f.pos.x, target.pos.y - f.pos.y, target.pos.z - f.pos.z) < LAND.RANGE) return target;
     let best = null, bd = Infinity;
     for (const p of this.open) {
       const d = Math.hypot(p.pos.x - f.pos.x, p.pos.y - f.pos.y, p.pos.z - f.pos.z) - (p === this.zone ? 6 : 0);
@@ -131,6 +138,7 @@ export class Gameplay {
       else if (L.state === 'fly' && this.zone) html = `<kbd>Space</kbd><span class="x2">×2</span> 降落<em>${esc(this.zone.name)}</em> · <kbd>G</kbd> 脚下落地`;
       else if (L.state === 'fly') html = '<kbd>G</kbd> 脚下落地 · 或双击 <kbd>Space</kbd>';
     }
+    if (play && L.landed && this.courier.nearby()) html = `<kbd>E</kbd> 与接待员交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>Space</kbd> 起飞`;
     this.hud.prompt(html);
   }
 
@@ -142,7 +150,8 @@ export class Gameplay {
 
     // keys are drained every step and acted on only while she is being flown
     const play = g.state === 'play', inp = g.input;
-    const tapLand = inp.take('Space2'), tapSpace = inp.take('Space'), tapQ = inp.take('KeyQ'), tapGround = inp.take('KeyG');
+    const tapLand = inp.take('Space2'), tapSpace = inp.take('Space'), tapQ = inp.take('KeyQ'), tapGround = inp.take('KeyG'), tapInteract = inp.take('KeyE');
+    if (play && tapInteract && this.courier.interact()) return;
 
     // the trick and the landing each pose the seated rider from a clean slate
     const seat = g.rider.seat;
@@ -160,17 +169,8 @@ export class Gameplay {
         if (this.zone) L.begin(this.zone); else L.beginGround();
       }
     }
-    if (this.open.length) {
-      if (play) {
-        // the first job is announced once she is under way
-        if (!this.playing) { this.playing = true; this.intro = 2.4; }
-        if (this.intro > 0 && (this.intro -= dt) <= 0 && this.courier.target && !L.busy) {
-          this.hud.card('这份包裹送往', this.courier.target.name, '循着金光飞去 · 在降落点旁连按两次 Space 落地', 5);
-        }
-      }
-      this.beacons.update(dt, f.pos, this.zone, this.courier.target, L.pad);
-      this.courier.update(dt);
-    }
+    if (this.beacons) this.beacons.update(dt, f.pos, this.zone, this.courier.target, L.pad);
+    this.courier.update(dt, ctl);
     this._prompt(play);
     this.hud.update(dt);
   }

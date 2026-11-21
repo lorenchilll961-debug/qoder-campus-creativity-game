@@ -1,0 +1,67 @@
+.world-map {
+  --wm-cream: #fff8ec;
+  --wm-gold: #ffd36b;
+  box-sizing: border-box;
+  width: min(1080px, calc(100vw - 40px));
+  height: min(860px, calc(100dvh - 40px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 22px;
+  border: 1px solid #c7b37e;
+  border-radius: 16px;
+  background: #142c29;
+  color: var(--wm-cream);
+  font: 14px/1.5 "LXGW WenKai", "PingFang SC", "STKaiti", sans-serif;
+  box-shadow: 0 24px 100px #0008, inset 0 0 0 5px #fff8ec08;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.world-map[open] { display: grid; grid-template-rows: auto auto minmax(140px, 1fr) auto auto; gap: 12px; }
+.world-map::backdrop { background: #071a20c9; }
+.world-map * { box-sizing: border-box; }
+.world-map .wm-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.world-map h2 { margin: 0; font-size: clamp(24px, 3vw, 32px); font-weight: 400; letter-spacing: 0.14em; }
+.world-map p { margin: 0; }
+.world-map .wm-header p { color: #d5bd85; font-size: 12px; letter-spacing: 0.12em; }
+.world-map button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #fff8ec50;
+  border-radius: 7px;
+  background: #203c33;
+  color: var(--wm-cream);
+  font: inherit;
+  cursor: pointer;
+}
+.world-map button:hover:not(:disabled) { border-color: var(--wm-gold); background: #304e3e; }
+.world-map button:active:not(:disabled) { background: #42634d; }
+.world-map button:focus-visible { outline: 3px solid var(--wm-gold); outline-offset: 3px; }
+.world-map button:disabled { opacity: 0.4; cursor: not-allowed; }
+.world-map .wm-header button { flex-shrink: 0; border-color: #d5bd85; }
+.world-map kbd { margin: 0 0 0 5px; font: inherit; font-size: 12px; }
+.world-map .wm-order { color: var(--wm-gold); border-top: 1px solid #d5bd8540; padding-top: 12px; overflow-wrap: anywhere; }
+.world-map .wm-surface { position: relative; min-width: 0; min-height: 140px; overflow: hidden; border: 1px solid #d5bd8560; border-radius: 8px; background: #1e3b41; }
+.world-map canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; touch-action: none; cursor: grab; }
+.world-map canvas.dragging { cursor: grabbing; }
+.world-map .wm-north { position: absolute; top: 10px; right: 12px; text-align: center; font-size: 17px; line-height: 1.2; pointer-events: none; text-shadow: 0 1px 4px #000; }
+.world-map .wm-toolbar, .world-map .wm-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.world-map .wm-zoom { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.world-map .wm-zoom button { min-width: 44px; font-size: 22px; line-height: 1; }
+.world-map output { display: inline-block; width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.world-map footer { font-size: 12px; color: #dbdfcf; overflow-wrap: anywhere; }
+.world-map footer p { margin-top: 5px; }
+.world-map .wm-position { font-variant-numeric: tabular-nums; }
+.world-map .wm-player { color: var(--wm-cream); }
+.world-map .wm-target { color: var(--wm-gold); }
+.world-map .wm-pickup { color: #a5dfba; }
+.world-map .wm-destination { color: #d5bd85; }
+@media (max-width: 620px), (max-height: 600px) {
+  .world-map { width: calc(100vw - 16px); height: calc(100dvh - 16px); padding: 12px; border-radius: 10px; }
+  .world-map[open] { gap: 8px; }
+  .world-map .wm-header p { display: none; }
+  .world-map .wm-order { font-size: 12px; padding-top: 8px; }
+  .world-map .wm-toolbar { gap: 6px; }
+  .world-map button { padding-inline: 10px; }
+  .world-map footer { font-size: 11px; }
+}
