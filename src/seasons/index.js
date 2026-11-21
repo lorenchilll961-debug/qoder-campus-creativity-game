@@ -143,6 +143,7 @@ export class Seasons {
     U.uSeasonSnow.value = state.snow;
     U.uSeasonPastel.value = state.pastel;
     U.uSeasonBare.value = state.bare;
+    U.uSeasonWither.value = state.wither;
     U.uSeasonSnowfall.value = state.snowfall;
     const c = state.climate;
     U.uClimate.value.set(c.strength, c.temperature, c.daylight, c.heat);

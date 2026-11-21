@@ -21,6 +21,7 @@ export const U = {
   uSeasonBloom: { value: 1 },
   uSeasonSnow: { value: 0 },
   uSeasonBare: { value: 0 },
+  uSeasonWither: { value: 0 },
   uSeasonSnowfall: { value: 0 },
   uSeasonPastel: { value: 0 },
   uClimate: { value: new THREE.Vector4(0, 26, 14, 0) },
