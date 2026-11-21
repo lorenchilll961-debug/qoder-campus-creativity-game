@@ -4,8 +4,8 @@ export const FIRST_ORDER = Object.freeze({
   parcel: '一包新焙春茶',
   pickup: 'larkhaven:m_couriers:7:0',
   destination: 'larkhaven:m_teahouse:48:0',
-  sender: '阿岚 · 公会信使',
-  recipient: '林婆婆 · 茶馆主人',
+  sender: '阿岚 · 商店老板',
+  recipient: '老林 · 村民',
   reward: 30,
 });
 
