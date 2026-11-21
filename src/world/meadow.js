@@ -207,7 +207,7 @@ void main(){
   vNormal = n;
   vInfo = vec4(t, rnd.w, gust, light.r);
   // on cliff ledges the sward is short, wind-burnt and darker (matches the far-field ground)
-  vTint = mix(meadowTint(xz, wet), mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.44, 0.365, 0.20), uSeasonWither), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
+  vTint = mix(meadowTint(xz, wet), mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.41, 0.255, 0.070), uSeasonWither), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
   vAux = vec2(light.g, min(wk.z, 1.0));
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }
@@ -238,10 +238,11 @@ void main(){
   // colour runs from shaded thatch at the root to sun-bleached tips. In the sparse far shells a
   // blade stands in for a whole tuft, so it carries the canopy colour nearly root to tip.
   vec3 rootC = vTint * mix(1.05, 0.42, uRoot);
-  vec3 tipC = vTint * mix(1.30, 1.62, uRoot) + vec3(0.050, 0.060, 0.004) * uRoot;
+  vec3 tipC = vTint * mix(1.30, 1.62, uRoot) + vec3(0.050, 0.060, 0.004) * uRoot * mix(1.0, 0.25, uSeasonWither);
   vec3 alb = mix(rootC, tipC, pow(t, 1.25)) * mix(0.84, 1.16, vInfo.y);
-  alb = mix(alb, vec3(0.50, 0.46, 0.20), smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
-  alb = mix(alb, alb * vec3(1.18, 1.05, 0.78), uSeasonWither);   // dead blades have no green left to cool
+  vec3 straw = vec3(0.50, 0.46, 0.20) * mix(vec3(1.0), vec3(1.18, 0.92, 0.55), uSeasonWither);
+  alb = mix(alb, straw, smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
+  alb = mix(alb, alb * vec3(1.14, 1.03, 0.70), uSeasonWither);   // dead blades have no green left to cool
 
   // Only scattered upper tips carry crystalline rime; the blade remains green/brown below it.
   float frostTip = uSurfaceWeather.z * smoothstep(0.76, 0.98, t) * smoothstep(0.58, 0.84, vInfo.y);

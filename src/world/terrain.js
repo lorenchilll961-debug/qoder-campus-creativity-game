@@ -514,8 +514,8 @@ void main(){
   // close up we look between the blades at shaded thatch; far away this stands in for the whole sward
   // grass clinging to steep ground and ledges is short, wind-burnt and darker
   float steepK = max(smoothstep(0.06, 0.24, slope), smoothstep(0.25, 0.8, cliffy) * 0.85);
-  tint = mix(tint, mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.44, 0.365, 0.20), uSeasonWither), steepK * 0.7);
-  vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0);
+  tint = mix(tint, mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.41, 0.255, 0.070), uSeasonWither), steepK * 0.7);
+  vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0) * mix(1.0, 0.2, uSeasonWither);
   vec3 swardNear = tint * mix(0.62, 0.86, uSeasonWither) * gDetail;
   // seen from afar the sward is tussocks, hollows and wind-combed patches, not a flat wash
   float mott = ntexA(P.xz * 0.55).r * 0.5 + nzA.b * 0.3 + nzB.a * 0.2;
@@ -671,7 +671,9 @@ void main(){
   float exposed = smoothstep(-0.1, 1.0, P.y) * (0.45 + 0.55 * saturate(N.y));
   float wetness = saturate(uSurfaceWeather.x) * exposed * (0.70 + 0.30 * nzB.g);
   if (wetness > 0.0){
-    m.c *= mix(vec3(1.0), vec3(0.60, 0.65, 0.68), wetness);
+    // wet dead sward darkens to a deep gold rather than going grey
+    vec3 wetTint = mix(vec3(0.60, 0.65, 0.68), vec3(0.74, 0.64, 0.42), uSeasonWither);
+    m.c *= mix(vec3(1.0), wetTint, wetness);
     m.r = mix(m.r, min(m.r, 0.19 + 0.09 * nzC.b), wetness);
     Nw = normalize(mix(Nw, N, wetness * 0.18));
   }
@@ -680,7 +682,7 @@ void main(){
     float frozen = uSurfaceWeather.w * exposed * (1.0 - rockAmt) * (1.0 - lowW) * (1.0 - max(town.r, town.g));
     float grain = 0.70 + 0.30 * smoothstep(0.24, 0.76, nzC.r * 0.6 + m.h * 0.4);
     // the dead sward keeps its straw tone under the freeze instead of turning blue-grey
-    vec3 frozenC = mix(vec3(0.70, 0.79, 0.91), vec3(0.92, 0.88, 0.78), uSeasonWither);
+    vec3 frozenC = mix(vec3(0.70, 0.79, 0.91), vec3(0.86, 0.74, 0.46), uSeasonWither);
     m.c *= mix(vec3(1.0), frozenC * grain, frozen);
   }
   if (uSurfaceWeather.z > 0.0){

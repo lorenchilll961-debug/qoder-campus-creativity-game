@@ -135,12 +135,12 @@ ${SEASON}
 uniform float uSeasonPastel;
 uniform float uSeasonGoldBloom;
 uniform float uSeasonWither;
-// Dead sward left from the cold season: straw tones streaked with dry patches, no green in it.
+// Dead sward left from the cold season: a deeper ochre than autumn's gold, streaked with dry patches, no green in it.
 vec3 seasonDeadSward(vec2 xz){
   float a = vnoise(xz * 0.0093 + 4.0);
   float b = vnoise(xz * 0.041 - 2.0);
   float streak = smoothstep(0.24, 0.80, a * 0.55 + b * 0.45);
-  return mix(vec3(0.44, 0.355, 0.165), vec3(0.86, 0.72, 0.400), streak);
+  return mix(vec3(0.440, 0.255, 0.050), vec3(0.870, 0.600, 0.115), streak);
 }
 vec3 seasonGoldPetal(vec3 color){
   float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
