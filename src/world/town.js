@@ -33,6 +33,12 @@ export class Town {
       U[`uTownMask${i}`].value = dataTex(await loadImage(`${base}/town/${m.file}`), { mips: true, aniso: 4 });
       U[`uTownRect${i}`].value.set(m.x0, m.z0, 1 / m.w, 1 / m.h);
     }));
+    try {
+      const response = await fetch(`${base}/town/sites.json`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const sites = await response.json();
+      town.roads = sites.towns.flatMap((site) => site.streets.filter((street) => street.kind !== 'edge'));
+    } catch (error) { console.warn('航图路网未加载', error); }
     if (!index || !index.towns.length) return town;
     const [mats, tiles] = await Promise.all([materialArrays(`${base}/town/tex`), fetch(`${base}/town/tex/materials.json`).then((r) => r.json())]);
     town._material(mats, tiles);
@@ -50,6 +56,7 @@ export class Town {
     this.spinners = [];
     this.floaters = [];
     this.pads = [];
+    this.roads = [];
     this.smokes = [];
     this.lamps = [];
     this.buildings = [];
@@ -402,7 +409,8 @@ void main(){
     vec3 sky = skyBase(normalize(vec3(R.x, abs(R.y) * 0.8 + 0.08, R.z)));
     col += sky * mix(0.10 + 0.55 * fres, 0.30, metal) * mix(vec3(1.0), alb, metal) * mix(0.5, 1.0, ao) * max(glass, metal);
   }
-  col += vec3(1.0, 0.70, 0.36) * glow * 2.4;
+  float litWindow = mat == 14 ? 0.5 + 0.5 * hash13(floor(vWorld * 0.2)) : 0.0;
+  col += vec3(1.0, 0.64, 0.28) * (glow * (0.35 + uDayNight.y * 2.4) + litWindow * uDayNight.y * 1.5);
   col = applyAtmosphere(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }

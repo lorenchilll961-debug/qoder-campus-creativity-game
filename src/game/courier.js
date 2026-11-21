@@ -17,6 +17,8 @@ export class Courier {
   }
 
   get count() { return this.previousCount + (this.quest.status === 'completed' ? 1 : 0); }
+  get coins() { return this.quest.coins + (this.game.atlas?.coins || 0); }
+  get navigationTarget() { return this.game.atlas ? this.game.atlas.resolve(this.target) : this.target; }
   get target() {
     if (!this.pickup || !this.destination || this.quest.status === 'completed') return null;
     return this.quest.carrying ? this.destination : this.pickup;
@@ -107,14 +109,22 @@ export class Courier {
   }
 
   _show() {
-    const t = this.target;
-    this.hud.job(t?.name || (this.quest.status === 'completed' ? '春茶已送达' : null), t?.spot || '', this.count);
-    if (this.game.gameplay) this.hud.order(this.quest.status, this.quest.coins, this.objective());
-    this._acc = 1;
+    const t = this.navigationTarget;
+    const name = t?.name || (this.quest.status === 'completed' ? '春茶已送达' : '未跟踪航点');
+    const label = `${name}|${t?.spot || ''}|${this.count}`;
+    if (this._navLabel !== label) {
+      this._navLabel = label;
+      this.hud.job(name, t?.spot || '', this.count);
+    }
+    if (this.game.gameplay) {
+      this.hud.order(this.quest.status, this.coins, this.objective());
+      this.hud.navigation(t, this.game.flight, this.game.atlas?.tracking?.kind || 'quest');
+    }
   }
 
   objective() {
     const q = this.quest, L = this.game.gameplay?.landing;
+    if (this.game.atlas && this.game.atlas.tracking?.kind !== 'quest') return '地图航点仅提供方向，不会改变订单。按 M 可返回订单目标或切换地标；自定义图钉不保证可降落。';
     if (q.status === 'completed') return '第一单完成！G 起飞，继续探索海岛。M 随时查看世界地图。';
     if (!this.target) return '配送点暂不可用，仍可自由飞行与探索。';
     if (this.near(this.target)) return q.carrying ? '已到屋顶露台，按 E 与老林交谈并交付春茶。' : '按 E 与阿岚交谈，确认接下第一单。';
@@ -143,11 +153,11 @@ export class Courier {
     this._acc += dt;
     if (this._acc < 0.1) return;
     this._acc = 0;
-    const t = this.target;
+    this._show();
+    const t = this.navigationTarget;
     if (t) {
       const dx = t.pos.x - f.pos.x, dz = t.pos.z - f.pos.z;
       this.hud.jobAt(Math.hypot(dx, dz), Math.atan2(dx, -dz) - f.yaw);
     }
-    this.hud.order(this.quest.status, this.quest.coins, this.objective());
   }
 }

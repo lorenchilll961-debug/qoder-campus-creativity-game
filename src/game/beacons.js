@@ -258,7 +258,10 @@ export class Beacons {
       L[i * 4] = s.show; L[i * 4 + 1] = s.zone; L[i * 4 + 2] = s.gold;
       if (gold) { this.uMark.value.set(p.pos.x, p.pos.y, p.pos.z, s.show * s.gold); mark = 1; }
     });
-    if (!mark) this.uMark.value.w = 0;
+    if (!mark && target) {
+      const distance = Math.hypot(target.pos.x - pos.x, target.pos.y - pos.y, target.pos.z - pos.z);
+      this.uMark.value.set(target.pos.x, target.pos.y, target.pos.z, 1 - smooth01((distance - BEACON.FAR) / 300));
+    } else if (!mark) this.uMark.value.w = 0;
     this.aLook.needsUpdate = true;
   }
 

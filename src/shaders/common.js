@@ -51,6 +51,7 @@ uniform vec3 uCamPos;
 // Declared here only: cloud lookups inherit these through ATMOSPHERE.
 uniform vec4 uClimate;       // strength, temperature (C), daylight (hours), heat
 uniform vec4 uWeather;       // rain, cloud, fog, flash
+uniform vec4 uDayNight;
 
 // Clear-sky radiance for a view direction (no sun disc, no clouds).
 vec3 skyBase(vec3 d){

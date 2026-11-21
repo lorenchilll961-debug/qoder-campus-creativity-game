@@ -27,6 +27,10 @@ import { far } from './game/hud.js';
 import { Seasons } from './seasons/index.js';
 import { SEASONS } from './seasons/cycle.js';
 import { SeasonWeather } from './seasons/weather.js';
+import { SaveService } from './core/save.js';
+import { WorldState } from './core/world-state.js';
+import { WorldControls } from './ui/world-controls.js';
+import { AtlasState, worldLandmarks } from './core/atlas-state.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -85,7 +89,13 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 async function boot() {
   $('title').classList.add('loading');
   applyEnv('afternoon');
+  game.save = new SaveService();
+  game.worldState = new WorldState(game.save);
   game.seasons = new Seasons($('seasonPanel'), game);
+  game.worldControls = new WorldControls($('seasonPanel'), game);
+  const saveWorld = () => { game.worldState.save(); game.atlas?.save(); game.save.flush(); };
+  window.addEventListener('pagehide', saveWorld);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveWorld(); });
   const noise = makeNoiseTexture();
   U.uNoiseTex.value = noise.texture;
   game.noise = noise;
@@ -144,7 +154,7 @@ async function boot() {
   world.add(town.group);
   town.bakeShadows();
   // hidden places and their treasures (their models load later, as the rider comes near)
-  const places = (game.places = await Places.load(renderer, terrain));
+  const places = (game.places = await Places.load(renderer, terrain, game.save));
   world.add(places.group);
   pipeline.overlay.add(places.overlay);
 
@@ -180,8 +190,12 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
+  game.atlas = new AtlasState(game.save, terrain, worldLandmarks(game));
+  for (const place of places.list) place.visited = game.atlas.discovered.has(`place:${place.id}`);
   await Promise.all([game.gameplay.standReady, game.gameplay.attachUi()]);
   game.weather = new SeasonWeather(game);
+  game.seasons.update(0);
+  game.worldControls.update();
 
   resize();
   setLoad(1);
@@ -245,7 +259,10 @@ function frame(now) {
   last = now;
   autoScale(raw);
   if (!game.paused) step(dt);
-  else if (game.gameplay.courier.dialogue?.modal.isOpen) game.gameplay.courier.npcs?.animateDialogue(dt);
+  else {
+    game.worldControls.update();
+    if (game.gameplay.courier.dialogue?.modal.isOpen) game.gameplay.courier.npcs?.animateDialogue(dt);
+  }
   render(dt);
 }
 
@@ -433,6 +450,7 @@ function hud(dt) {
   if (hudAcc < 0.066) return;
   const step = hudAcc;
   hudAcc = 0;
+  game.worldControls.update();
   const f = game.flight;
   $('speed').textContent = Math.round(f.speed * 3.6);
   $('gustFill').style.width = `${Math.round(f.gust * 100)}%`;
@@ -521,7 +539,7 @@ function goggles(dt) {
     gEl.speed.textContent = Math.round(f.speed * 3.6);
     gEl.alt.textContent = Math.max(0, Math.round(f.agl));
     gEl.gust.style.width = `${Math.round(f.gust * 100)}%`;
-    const t = game.gameplay?.courier?.target;
+    const t = game.gameplay.navigationTarget;
     if (t) {
       gEl.parcel.hidden = false;
       const brg = Math.atan2(t.pos.x - f.pos.x, -(t.pos.z - f.pos.z)) - f.yaw;

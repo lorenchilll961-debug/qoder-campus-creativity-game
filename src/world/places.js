@@ -36,7 +36,6 @@ const SETS = ['west', 'east'];
 const LOAD_DIST = 1500;       // metres: fetch a place's models when the rider (or the eye) is this close
 const PICKUP = 4.2;           // metres: fly this close to a treasure to take it
 const CELL = 48;              // collision grid
-const STORE_KEY = 'petalwake.treasures.v1';
 const SHARED = [...SKY_UNIFORMS, 'uTime', 'uLightTex', 'uHeightTex', 'uSplatTex', 'uWorld', 'uNoiseTex', 'uWind', 'uWakeTex', 'uWake', 'uShadowTex', 'uShadowMat', 'uShadowOn'];
 
 const rand = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
@@ -53,7 +52,7 @@ function vnoise(x, z, seed) {
 }
 
 export class Places {
-  static async load(renderer, terrain, base = './assets') {
+  static async load(renderer, terrain, store, base = './assets') {
     const sets = await Promise.all(SETS.map(async (name) => {
       try {
         const res = await fetch(`${base}/places/${name}.json`);
@@ -65,10 +64,11 @@ export class Places {
         return [];
       }
     }));
-    return new Places(renderer, terrain, base, sets.flat());
+    return new Places(renderer, terrain, base, sets.flat(), store);
   }
 
-  constructor(renderer, terrain, base, defs) {
+  constructor(renderer, terrain, base, defs, store) {
+    this.store = store;
     this.renderer = renderer;
     this.terrain = terrain;
     this.base = `${base}/places/`;
@@ -129,10 +129,11 @@ export class Places {
 
   // ------------------------------------------------------------------------------ persistence
   _restore() {
-    try { return new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]')); } catch { return new Set(); }
+    const saved = this.store.get('treasures.v1', []);
+    return new Set(Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : []);
   }
   _save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(this.list.filter((p) => p.treasure && p.treasure.found).map((p) => p.treasure.id))); } catch { /* private mode: the journal lasts the session */ }
+    this.store.set('treasures.v1', this.list.filter((p) => p.treasure && p.treasure.found).map((p) => p.treasure.id));
   }
   /** Debug: forget everything that has been found. */
   reset() {

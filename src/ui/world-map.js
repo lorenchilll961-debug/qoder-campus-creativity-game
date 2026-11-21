@@ -3,7 +3,10 @@ import { GameModal } from './dialogue.js';
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const side = (w, h) => Math.max(1, Math.min(w, h));
 const valid = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.z);
-const COLORS = { player: '#fff8ec', target: '#ffd36b', pickup: '#a5dfba', destination: '#d5bd85' };
+const KINDS = { town: ['○', '城镇'], landing: ['■', '停靠平台'], place: ['◆', '探索地点'], pin: ['＋', '我的标记'] };
+const COLORS = { player: '#f5faf5', target: '#ffc979', pickup: '#94d7be', destination: '#dfc391', town: '#a9dfd4', landing: '#94d7be', place: '#c5cfaa', pin: '#ffc979' };
+const PIN_LIMIT = 12;
+const signed = n => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
 
 // span is metres across the viewport's SHORT axis; north is -z, east is +x.
 export function boundView(view, world, w, h) {
@@ -15,6 +18,10 @@ export function boundView(view, world, w, h) {
 export function mapPoint(p, view, w, h) {
   const scale = side(w, h) / view.span;
   return { x: w / 2 + (p.x - view.x) * scale, y: h / 2 + (p.z - view.z) * scale };
+}
+export function unmapPoint(p, view, w, h) {
+  const scale = view.span / side(w, h);
+  return { x: view.x + (p.x - w / 2) * scale, z: view.z + (p.y - h / 2) * scale };
 }
 export function panView(view, dx, dy, world, w, h) {
   const scale = view.span / side(w, h);
@@ -34,29 +41,50 @@ export function fitView(points, world, w, h) {
     span: Math.max(world / 12, (right - left) * side(w, h) / w, (bottom - top) * side(w, h) / h) * 1.3 }, world, w, h);
 }
 
-/** Owns only a 2D overlay; include world-map.css alongside the game's UI styles. */
+/** Event-driven atlas overlay. AtlasState alone owns persistent exploration/navigation. */
 export class WorldMap {
   constructor(game, courier) {
     this.game = game;
     this.courier = courier;
-    this.world = game.terrain.meta.world;
+    this.atlas = game.atlas;
+    this.world = this.atlas.world;
     this.view = { x: 0, z: 0, span: this.world * 1.08 };
+    this.selection = null;
+    this.addingPin = false;
+    this.draft = null;
+    this.rows = [];
     this.dialog = document.createElement('dialog');
     this.dialog.className = 'world-map';
     this.dialog.setAttribute('aria-label', '全岛航图');
-    this.dialog.innerHTML = `<header class="wm-header"><div><p>驭风者的航行手记</p><h2>全岛航图</h2></div>
-      <button type="button" data-action="close" autofocus aria-label="关闭地图，返回游戏">合上航图 <kbd>M</kbd></button></header>
-      <p class="wm-order" aria-live="polite"></p>
-      <div class="wm-surface"><canvas role="img" aria-label="全岛地图：上北下南，左西右东"></canvas>
-        <span class="wm-north" aria-hidden="true">↑<br>北</span></div>
-      <div class="wm-toolbar" role="group" aria-label="地图视图">
-        <button type="button" data-action="all">全岛总览</button><button type="button" data-action="route">查看航线</button>
-        <button type="button" data-action="player">回到玩家</button>
-        <div class="wm-zoom"><button type="button" data-action="out" aria-label="缩小地图">−</button>
-          <output aria-label="缩放倍数"></output><button type="button" data-action="in" aria-label="放大地图">+</button></div></div>
-      <footer><div class="wm-legend"><span class="wm-player">▲ 玩家</span><span class="wm-target">◎ 当前目标</span>
-        <span class="wm-pickup">■ 取件点</span><span class="wm-destination">◆ 收件点</span><span>· 城镇 / 建筑</span></div>
-        <p class="wm-position"></p><p>拖动平移 · 滚轮缩放 · 航线仅供方向参考，请留意山体并降落在指定平台 · M / Esc 返回</p></footer>`;
+    this.dialog.innerHTML = `<header class="wm-header"><div class="wm-title"><span class="wm-eyebrow">花信风 / 航行手记</span><h2>全岛航图</h2></div>
+      <div class="wm-header-actions"><button type="button" data-action="theme" aria-pressed="false">浅色航图</button>
+      <button type="button" data-action="close" autofocus aria-label="关闭地图，返回游戏">返回飞行 <kbd>M / Esc</kbd></button></div></header>
+      <section class="wm-navigation" aria-label="当前导航"><div><span class="wm-eyebrow">◎ 导航目标</span><p class="wm-order" aria-live="polite"></p></div>
+        <div class="wm-nav-actions"><button type="button" data-action="quest">返回订单</button><button type="button" data-action="stop">停止追踪</button></div></section>
+      <div class="wm-layout"><section class="wm-chart" aria-label="地形航图">
+        <div class="wm-filters" role="group" aria-label="地图类别筛选">
+          <button type="button" data-filter="town" aria-pressed="true">○ 城镇</button><button type="button" data-filter="landing" aria-pressed="true">■ 停靠平台</button>
+          <button type="button" data-filter="place" aria-pressed="true">◆ 探索地点</button><button type="button" data-filter="pin" aria-pressed="true">＋ 我的标记</button></div>
+        <div class="wm-surface"><canvas role="img" aria-label="真实地形航图，上北下南。可在右侧地点列表选择与追踪。"></canvas>
+          <span class="wm-north" aria-hidden="true">↑<br>北 N</span><span class="wm-map-hint">暗色区域尚未探索</span><span class="wm-hover" hidden></span></div>
+        <div class="wm-toolbar" role="group" aria-label="地图视图"><button type="button" data-action="all">全岛总览</button>
+          <button type="button" data-action="route">查看航线</button><button type="button" data-action="player">回到玩家</button>
+          <div class="wm-zoom"><button type="button" data-action="out" aria-label="缩小地图">−</button><output aria-label="缩放倍数"></output>
+          <button type="button" data-action="in" aria-label="放大地图">+</button></div></div>
+        <p class="wm-position"></p></section>
+        <aside class="wm-sidebar" aria-label="地点与标记">
+          <section class="wm-exploration"><div><h3>探索记录</h3><span class="wm-progress-text"></span></div><progress max="100" value="0" aria-label="全岛探索进度"></progress><p class="wm-discoveries"></p></section>
+          <section class="wm-details" aria-label="所选地点"><span class="wm-detail-kind wm-eyebrow">地点详情</span><h3 class="wm-detail-name">选择一处地点</h3>
+            <p class="wm-detail-description">点击地图符号或下方地点列表，查看距离与高度。</p><p class="wm-detail-coordinates"></p><p class="wm-detail-warning"></p>
+            <div class="wm-detail-actions"><button type="button" data-action="track" disabled>追踪地点</button><button type="button" data-action="focus" disabled>在图中定位</button></div>
+            <form class="wm-pin-editor" hidden><label for="wm-pin-name">标记名称</label><input id="wm-pin-name" name="pinName" maxlength="32" autocomplete="off" placeholder="为这处标记命名">
+              <div><button type="submit" data-action="save-pin">保存名称</button><button type="button" data-action="delete-pin">删除标记</button><button type="button" data-action="cancel-pin" hidden>取消</button></div></form>
+          </section>
+          <div class="wm-list-heading"><h3>地点索引 <span class="wm-count"></span></h3><button type="button" data-action="add-pin" aria-pressed="false">＋ 添加标记</button></div>
+          <p class="wm-pin-status" role="status"></p><div class="wm-places" role="group" aria-label="可选择的已知地点"></div><p class="wm-empty" hidden>此类别暂无已知地点。继续探索，或开启其他类别。</p>
+        </aside></div>
+      <footer><div class="wm-legend"><span>▲ 玩家</span><span class="wm-target">◎ 当前目标</span><span class="wm-pickup">■ 取件点</span><span class="wm-destination">◆ 收件点</span></div>
+        <p>拖动平移 · 滚轮缩放 · 虚线仅为方向参考，不是地面道路；请避开山体，降落在指定平台。</p></footer>`;
     document.body.appendChild(this.dialog);
     this.canvas = this.dialog.querySelector('canvas');
     this.ctx = this.canvas.getContext('2d');
@@ -68,168 +96,412 @@ export class WorldMap {
       if (this.open()) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
     window.addEventListener('keydown', this.onKey, true);
-    this.dialog.addEventListener('click', (e) => {
-      const action = e.target.closest('[data-action]')?.dataset.action;
-      if (action === 'close') this.modal.close();
-      else if (action === 'all') this.setView({ x: 0, z: 0, span: this.world * 1.08 });
-      else if (action === 'route') this.setView(fitView(this.routePoints(), this.world, this.w, this.h));
-      else if (action === 'player' && valid(game.flight.pos)) this.setView({ ...game.flight.pos, span: Math.min(this.view.span, this.world / 4) });
-      else if (action === 'in' || action === 'out') this.zoom(action === 'in' ? 0.75 : 1 / 0.75, this.w / 2, this.h / 2);
+    this.dialog.addEventListener('click', e => {
+      const button = e.target.closest('button');
+      if (!button || button.disabled) return;
+      if (button.dataset.filter) {
+        const kind = button.dataset.filter;
+        this.atlas.setFilter(kind, !this.atlas.filters[kind]); this.render();
+      } else if (button.dataset.id) this.select(button.dataset.kind, button.dataset.id);
+      else this.action(button.dataset.action);
     });
-    this.canvas.addEventListener('pointerdown', (e) => {
+    this.dialog.querySelector('.wm-pin-editor').addEventListener('submit', e => { e.preventDefault(); this.savePin(); });
+    // Preserve GameModal's pause/input capture; allow the letter M in a name field.
+    this.dialog.addEventListener('focusin', e => { this.modal.closeKey = e.target.matches('input') ? undefined : 'KeyM'; });
+    this.dialog.addEventListener('focusout', () => { this.modal.closeKey = 'KeyM'; });
+    this.canvas.addEventListener('pointerdown', e => {
       if (!this.modal.isOpen || e.button !== 0 || this.drag) return;
-      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-      this.canvas.setPointerCapture(e.pointerId);
-      this.canvas.classList.add('dragging');
-      e.preventDefault();
+      this.cancelZoom();
+      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, moved: false };
+      this.canvas.setPointerCapture(e.pointerId); e.preventDefault();
     });
-    this.canvas.addEventListener('pointermove', (e) => {
-      if (!this.drag || this.drag.id !== e.pointerId) return;
-      this.setView(panView(this.view, e.clientX - this.drag.x, e.clientY - this.drag.y, this.world, this.w, this.h));
-      this.drag.x = e.clientX; this.drag.y = e.clientY;
+    this.canvas.addEventListener('pointermove', e => {
+      if (!this.modal.isOpen) return;
+      if (!this.drag) { this.hover(e); return; }
+      const d = this.drag;
+      if (d.id !== e.pointerId) return;
+      if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 5) d.moved = true;
+      if (d.moved) {
+        this.canvas.classList.add('dragging');
+        this.setView(panView(this.view, e.clientX - d.x, e.clientY - d.y, this.world, this.w, this.h));
+        d.x = e.clientX; d.y = e.clientY;
+      }
     });
-    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) this.canvas.addEventListener(event, (e) => {
+    this.canvas.addEventListener('pointerup', e => {
+      const d = this.drag;
+      if (!d || d.id !== e.pointerId) return;
+      const click = !d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) <= 5;
+      this.endDrag();
+      if (click && this.modal.isOpen) this.surfaceClick(this.localPoint(e));
+    });
+    for (const event of ['pointercancel', 'lostpointercapture']) this.canvas.addEventListener(event, e => {
       if (this.drag?.id === e.pointerId) this.endDrag();
     });
-    this.canvas.addEventListener('wheel', (e) => {
-      if (!this.modal.isOpen) return;
+    this.canvas.addEventListener('pointerleave', () => this.clearHover());
+    this.canvas.addEventListener('wheel', e => {
+      if (!this.modal.isOpen || this.drag) return;
       e.preventDefault();
-      const rect = this.canvas.getBoundingClientRect();
-      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.h : 1);
-      this.zoom(Math.exp(clamp(delta * 0.0015, -0.7, 0.7)), e.clientX - rect.left, e.clientY - rect.top);
+      const p = this.localPoint(e), delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.h : 1);
+      this.zoom(Math.exp(clamp(delta * 0.0015, -0.7, 0.7)), p.x, p.y);
     }, { passive: false });
-    this.dialog.addEventListener('close', () => this.endDrag());
-    this.onBlur = () => this.endDrag();
+    this.dialog.addEventListener('close', () => { if (!this.modal.isOpen) this.cancelInteraction(); });
+    this.onBlur = () => this.cancelInteraction();
     window.addEventListener('blur', this.onBlur);
-    this.observer = new ResizeObserver(() => { if (this.modal.isOpen) this.render(); });
+    this.onVisibility = () => { if (document.hidden) this.cancelInteraction(); };
+    document.addEventListener('visibilitychange', this.onVisibility);
+    this.observer = new ResizeObserver(() => { if (this.modal.isOpen) { this.cancelZoom(); this.render(); } });
     this.observer.observe(this.canvas);
   }
 
   get isOpen() { return this.modal.isOpen; }
   open() {
     if (this.modal.isOpen || !this.modal.show()) return false;
-    this.render(); // Fresh player/order data and layout, even on the very first open.
+    this.render();
     this.courier.mapOpened?.();
     return true;
   }
-  close() { this.modal.close(); }
+  close() { this.cancelInteraction(); this.modal.close(); }
+  cancelInteraction() {
+    this.endDrag(); this.cancelZoom(); this.clearHover(); this.addingPin = false; this.draft = null;
+    if (this.modal.isOpen) this.render();
+  }
   endDrag() {
     const id = this.drag?.id;
     this.drag = null;
     if (id !== undefined && this.canvas.hasPointerCapture(id)) this.canvas.releasePointerCapture(id);
     this.canvas.classList.remove('dragging');
   }
-  routePoints() {
-    return [this.game.flight.pos, this.courier.pickup?.pos, this.courier.destination?.pos, this.courier.target?.pos].filter(valid);
+  target() {
+    const target = this.atlas.resolve(this.courier.target);
+    return target && (!target.hidden || this.atlas.isKnown(target)) ? target : null;
   }
-  setView(view) { this.view = boundView(view, this.world, this.w, this.h); this.render(); }
-  zoom(factor, x, y) { this.setView(zoomView(this.view, factor, x, y, this.world, this.w, this.h)); }
+  routePoints() {
+    const stops = this.courier.quest.status === 'completed' ? [] : [this.courier.pickup, this.courier.destination];
+    return [this.game.flight.pos, this.target()?.pos, ...stops
+      .filter(p => p && (!p.hidden || this.atlas.isKnown(p))).map(p => p.pos)].filter(valid);
+  }
+  knownItems() { return [...this.atlas.landmarks.filter(p => this.atlas.isKnown(p)), ...this.atlas.pins]; }
+  visibleItems() { return this.knownItems().filter(p => this.atlas.filters[p.kind]); }
+  selected() { return this.visibleItems().find(p => p.id === this.selection?.id && (p.kind === 'pin' ? 'pin' : 'landmark') === this.selection.kind) || null; }
+  select(kind, id) {
+    this.selection = { kind, id }; this.draft = null; this.addingPin = false;
+    this.render();
+  }
+  action(action) {
+    if (action === 'close') this.close();
+    else if (action === 'all') this.setView({ x: 0, z: 0, span: this.world * 1.08 });
+    else if (action === 'route') this.setView(fitView(this.routePoints(), this.world, this.w, this.h));
+    else if (action === 'player' && valid(this.game.flight.pos)) this.setView({ ...this.game.flight.pos, span: Math.min(this.view.span, this.world / 4) });
+    else if (action === 'in' || action === 'out') this.zoom(action === 'in' ? 0.75 : 1 / 0.75, this.w / 2, this.h / 2);
+    else if (action === 'theme') { this.atlas.setTheme(this.atlas.theme === 'dark' ? 'light' : 'dark'); this.render(); }
+    else if (action === 'quest') { this.atlas.track('quest'); this.render(); }
+    else if (action === 'stop') { this.atlas.clearTracking(); this.render(); }
+    else if (action === 'track' && this.selected()) { this.atlas.track(this.selection.kind, this.selection.id); this.render(); }
+    else if (action === 'focus' && this.selected()) this.setView({ ...this.selected().pos, span: this.world / 8 });
+    else if (action === 'add-pin' && this.atlas.pins.length < PIN_LIMIT) {
+      this.addingPin = !this.addingPin; this.draft = null; this.editorKey = null; this.render();
+    } else if (action === 'cancel-pin') { this.draft = null; this.addingPin = false; this.render(); }
+    else if (action === 'delete-pin' && this.selected()?.kind === 'pin') {
+      this.atlas.removePin(this.selection.id); this.selection = null; this.render();
+      this.dialog.querySelector('[data-action="add-pin"]').focus();
+    }
+    // save-pin is handled by the form's native submit (including Enter).
+  }
+  savePin() {
+    const input = this.dialog.querySelector('#wm-pin-name');
+    if (this.draft) {
+      const pin = this.atlas.addPin(this.draft.pos, input.value.trim() || this.draft.name);
+      if (!pin) { this.dialog.querySelector('.wm-pin-status').textContent = '无法添加：最多保存 12 个标记，请先删除一个。'; return; }
+      this.atlas.setFilter('pin', true);
+      this.selection = { kind: 'pin', id: pin.id }; this.draft = null; this.addingPin = false;
+    } else if (this.selected()?.kind === 'pin') {
+      if (!input.value.trim()) { this.dialog.querySelector('.wm-pin-status').textContent = '请输入标记名称。'; input.focus(); return; }
+      this.atlas.renamePin(this.selection.id, input.value);
+    } else return;
+    this.editorKey = null; this.render();
+    this.dialog.querySelector('.wm-pin-status').textContent = '标记已保存。仅用于导航，不是停靠平台。';
+  }
+  localPoint(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) * this.w / rect.width, y: (e.clientY - rect.top) * this.h / rect.height };
+  }
+  hitTest(p) {
+    return this.visibleItems().map(item => ({ item, screen: mapPoint(item.pos, this.view, this.w, this.h) }))
+      .filter(({ screen }) => screen.x >= 0 && screen.x <= this.w && screen.y >= 0 && screen.y <= this.h)
+      .map(hit => ({ ...hit, distance: Math.hypot(p.x - hit.screen.x, p.y - hit.screen.y) }))
+      .filter(hit => hit.distance <= 16).sort((a, b) => a.distance - b.distance)[0]?.item;
+  }
+  surfaceClick(p) {
+    if (this.addingPin) {
+      const pos = unmapPoint(p, this.view, this.w, this.h);
+      if (Math.abs(pos.x) > this.world / 2 || Math.abs(pos.z) > this.world / 2) {
+        this.dialog.querySelector('.wm-pin-status').textContent = '请在全岛边界内添加标记。'; return;
+      }
+      pos.y = Math.max(this.game.terrain.meta.sea ?? 0, this.game.terrain.heightAt(pos.x, pos.z));
+      this.draft = { name: `标记 ${this.atlas.pins.length + 1}`, kind: 'pin', pos };
+      this.editorKey = null; this.render();
+      const input = this.dialog.querySelector('#wm-pin-name'); input.focus(); input.select();
+      return;
+    }
+    const item = this.hitTest(p);
+    this.selection = item ? { kind: item.kind === 'pin' ? 'pin' : 'landmark', id: item.id } : null;
+    this.render();
+  }
+  hover(e) {
+    const item = this.hitTest(this.localPoint(e));
+    const tooltip = this.dialog.querySelector('.wm-hover');
+    tooltip.hidden = !item || this.addingPin;
+    tooltip.textContent = item ? `${KINDS[item.kind][0]} ${item.name}` : '';
+    this.canvas.classList.toggle('has-hit', !!item);
+  }
+  clearHover() { this.dialog.querySelector('.wm-hover').hidden = true; this.canvas.classList.remove('has-hit'); }
+  setView(view) { this.cancelZoom(); this.clearHover(); this.view = boundView(view, this.world, this.w, this.h); this.render(); }
+  cancelZoom() {
+    if (this.zoomFrame != null) window.cancelAnimationFrame?.(this.zoomFrame);
+    this.zoomFrame = null; this.zoomTarget = null;
+  }
+  zoom(factor, x, y) {
+    const destination = zoomView(this.zoomTarget || this.view, factor, x, y, this.world, this.w, this.h);
+    this.cancelZoom();
+    if (!this.modal.isOpen) return;
+    if (!window.requestAnimationFrame || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { this.setView(destination); return; }
+    const start = { ...this.view };
+    let began;
+    this.zoomTarget = destination;
+    const tick = time => {
+      if (!this.modal.isOpen || this.zoomTarget !== destination) return;
+      began ??= time;
+      const t = Math.min(1, (time - began) / 150), ease = 1 - (1 - t) ** 3;
+      this.view = boundView({ x: start.x + (destination.x - start.x) * ease, z: start.z + (destination.z - start.z) * ease,
+        span: start.span + (destination.span - start.span) * ease }, this.world, this.w, this.h);
+      this.draw(); this.renderZoom();
+      if (t < 1) this.zoomFrame = window.requestAnimationFrame(tick);
+      else { this.zoomFrame = null; this.zoomTarget = null; }
+    };
+    this.zoomFrame = window.requestAnimationFrame(tick);
+  }
 
   thumbnail() {
-    const terrain = this.game.terrain;
-    if (this.cachedTerrain === terrain && this.cachedWorld === this.world) return this.thumb;
-    this.thumb = document.createElement('canvas');
-    this.thumb.width = this.thumb.height = 256;
-    const ctx = this.thumb.getContext('2d'), image = ctx.createImageData(256, 256), heights = new Float32Array(256 * 256);
-    for (let z = 0; z < 256; z++) for (let x = 0; x < 256; x++)
-      heights[z * 256 + x] = terrain.heightAt(((x + 0.5) / 256 - 0.5) * this.world, ((z + 0.5) / 256 - 0.5) * this.world);
-    const sea = terrain.meta.sea ?? 0;
-    for (let i = 0; i < heights.length; i++) {
-      const h = heights[i], elevation = clamp((h - sea) / 480, 0, 1);
-      const shade = clamp((h - heights[Math.max(0, i - 256)]) * 0.6, -18, 18);
-      const rgb = h <= sea ? [30, 59, 65] : [68 + elevation * 138 + shade, 94 + elevation * 101 + shade, 68 + elevation * 75 + shade];
-      image.data.set([...rgb, 255], i * 4);
+    const terrain = this.game.terrain, size = 384;
+    if (this.cachedTerrain !== terrain || this.cachedWorld !== this.world) {
+      this.heights = new Float32Array(size * size);
+      for (let z = 0; z < size; z++) for (let x = 0; x < size; x++)
+        this.heights[z * size + x] = terrain.heightAt(((x + 0.5) / size - 0.5) * this.world, ((z + 0.5) / size - 0.5) * this.world);
+      this.cachedTerrain = terrain; this.cachedWorld = this.world; this.cachedTheme = null;
     }
-    ctx.putImageData(image, 0, 0);
-    this.cachedTerrain = terrain; this.cachedWorld = this.world;
+    if (this.cachedTheme === this.atlas.theme) return this.thumb;
+    this.thumb = document.createElement('canvas'); this.fogThumb = document.createElement('canvas');
+    this.thumb.width = this.thumb.height = this.fogThumb.width = this.fogThumb.height = size;
+    const ctx = this.thumb.getContext('2d'), fog = this.fogThumb.getContext('2d');
+    const image = ctx.createImageData(size, size), muted = fog.createImageData(size, size), sea = terrain.meta.sea ?? 0;
+    const light = this.atlas.theme === 'light';
+    for (let i = 0; i < this.heights.length; i++) {
+      const h = this.heights[i], elevation = clamp((h - sea) / 480, 0, 1);
+      const shade = clamp((h - this.heights[Math.max(0, i - size)]) * 0.6, -18, 18);
+      const rgb = h <= sea ? (light ? [101, 155, 163] : [26, 63, 72]) :
+        (light ? [116 + elevation * 96 + shade, 145 + elevation * 69 + shade, 114 + elevation * 72 + shade] :
+          [62 + elevation * 126 + shade, 103 + elevation * 92 + shade, 82 + elevation * 72 + shade]);
+      const grey = (rgb[0] * 0.3 + rgb[1] * 0.5 + rgb[2] * 0.2) * 0.42;
+      image.data.set([...rgb, 255], i * 4); muted.data.set([grey, grey + 8, grey + 10, 255], i * 4);
+    }
+    ctx.putImageData(image, 0, 0); fog.putImageData(muted, 0, 0);
+    this.cachedTheme = this.atlas.theme;
     return this.thumb;
   }
-
+  drawRiver(point, scale) {
+    const river = this.game.terrain.meta.river || [], c = this.ctx;
+    c.fillStyle = this.atlas.theme === 'light' ? '#79bac2' : '#44888e';
+    for (let i = 1; i < river.length; i++) {
+      const a = river[i - 1], b = river[i];
+      if (![...a, ...b].every(Number.isFinite)) continue;
+      const p = point({ x: a[0], z: a[1] }), q = point({ x: b[0], z: b[1] });
+      const length = Math.hypot(q.x - p.x, q.y - p.y);
+      if (!length) continue;
+      const nx = -(q.y - p.y) / length, ny = (q.x - p.x) / length, aw = a[2] * scale, bw = b[2] * scale;
+      c.beginPath(); c.moveTo(p.x + nx * aw, p.y + ny * aw); c.lineTo(q.x + nx * bw, q.y + ny * bw);
+      c.lineTo(q.x - nx * bw, q.y - ny * bw); c.lineTo(p.x - nx * aw, p.y - ny * aw); c.closePath(); c.fill();
+    }
+  }
+  drawRoads(point, scale) {
+    const c = this.ctx;
+    c.strokeStyle = this.atlas.theme === 'light' ? '#eadbc0' : '#a7aaa0';
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (const road of this.game.town?.roads || []) {
+      if (road.pts.length < 2) continue;
+      c.lineWidth = Math.max(0.7, road.width * scale);
+      c.beginPath();
+      road.pts.forEach(([x, z], i) => {
+        const p = point({ x, z });
+        if (i === 0) c.moveTo(p.x, p.y); else c.lineTo(p.x, p.y);
+      });
+      c.stroke();
+    }
+  }
+  drawFog(corner, scale) {
+    const { gridSize: n, cells } = this.atlas, cell = this.world / n * scale, source = this.fogThumb.width / n;
+    // Merge unknown horizontal runs. The UI only reads exploration cells, never reveals them.
+    for (let z = 0; z < n; z++) for (let x = 0; x < n;) {
+      if (cells[z * n + x]) { x++; continue; }
+      const start = x;
+      while (x < n && !cells[z * n + x]) x++;
+      this.ctx.drawImage(this.fogThumb, start * source, z * source, (x - start) * source, source,
+        corner.x + start * cell, corner.y + z * cell, (x - start) * cell + 0.4, cell + 0.4);
+    }
+  }
   render() {
-    if (!this.modal.isOpen) return; // Event-driven: no animation loop, including while closed.
-    this.world = this.game.terrain.meta.world;
-    const rect = this.canvas.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (!this.modal.isOpen) return;
+    this.world = this.atlas.world;
+    const rect = this.canvas.getBoundingClientRect();
     this.w = Math.max(1, rect.width); this.h = Math.max(1, rect.height);
     this.view = boundView(this.view, this.world, this.w, this.h);
-    this.canvas.width = Math.round(this.w * dpr); this.canvas.height = Math.round(this.h * dpr);
-    const c = this.ctx, w = this.w, h = this.h, v = this.view, scale = side(w, h) / v.span;
+    if (!this.selected()) this.selection = null;
+    this.renderUI(); this.draw();
+  }
+  draw() {
+    if (!this.modal.isOpen) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), c = this.ctx, w = this.w, h = this.h, v = this.view, scale = side(w, h) / v.span;
+    this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
     const point = p => mapPoint(p, v, w, h), corner = point({ x: -this.world / 2, z: -this.world / 2 });
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    c.fillStyle = '#1e3b41'; c.fillRect(0, 0, w, h);
+    c.fillStyle = this.atlas.theme === 'light' ? '#394143' : '#171f21'; c.fillRect(0, 0, w, h);
     c.drawImage(this.thumbnail(), corner.x, corner.y, this.world * scale, this.world * scale);
-    c.strokeStyle = '#fff8ec19'; c.lineWidth = 1;
+    this.drawRiver(point, scale); this.drawRoads(point, scale); this.drawFog(corner, scale);
+    c.strokeStyle = '#c0e5df18'; c.lineWidth = 1;
     for (let i = -2; i <= 2; i++) {
       const p = point({ x: i * this.world / 4, z: i * this.world / 4 });
       c.beginPath(); c.moveTo(p.x, 0); c.lineTo(p.x, h); c.moveTo(0, p.y); c.lineTo(w, p.y); c.stroke();
     }
-    for (const b of this.game.town?.buildings || []) {
-      const p = point({ x: b.pos[0], z: b.pos[2] });
-      c.fillStyle = '#dfd5b580'; c.fillRect(p.x - 2, p.y - 2, 4, 4);
-    }
     const labels = [];
-    const label = (text, x, y, color, anchor) => {
-      c.font = '14px "LXGW WenKai", "PingFang SC", sans-serif';
+    const label = (text, x, y, color) => {
+      text = String(text);
+      c.font = '12px system-ui, "PingFang SC", sans-serif';
       const original = text;
-      while (text.length > 1 && c.measureText(text).width > Math.min(300, w - 30)) text = text.slice(0, -1);
+      while (text.length > 1 && c.measureText(text).width > Math.min(220, w - 30)) text = text.slice(0, -1);
       if (text !== original) text = text.slice(0, -1) + '…';
       const width = c.measureText(text).width;
       x = clamp(x, 8, Math.max(8, w - width - 8));
-      const base = clamp(y, 18, h - 28);
+      const base = clamp(y, 18, h - 36);
       let found = false;
-      for (let n = 0; n < 15; n++) {
-        y = base + Math.ceil(n / 2) * (n % 2 ? -20 : 20);
-        if (y < 18 || y > h - 28 || labels.some(b => x < b.x + b.w + 6 && x + width + 6 > b.x && Math.abs(y - b.y) < 19)) continue;
+      for (let n = 0; n < 7; n++) {
+        y = base + Math.ceil(n / 2) * (n % 2 ? -18 : 18);
+        if (y < 18 || y > h - 36 || labels.some(b => x < b.x + b.w + 6 && x + width + 6 > b.x && Math.abs(y - b.y) < 17)) continue;
         found = true; break;
       }
       if (!found) return;
-      if (anchor && Math.hypot(x - anchor.x, y - anchor.y) > 30) {
-        c.beginPath(); c.strokeStyle = color; c.lineWidth = 1;
-        c.moveTo(anchor.x, anchor.y); c.lineTo(clamp(anchor.x, x, x + width), y + 3); c.stroke();
-      }
-      labels.push({ x, y, w: width }); c.lineWidth = 4; c.strokeStyle = '#152e2c'; c.fillStyle = color;
+      labels.push({ x, y, w: width }); c.lineWidth = 4; c.strokeStyle = '#172f34'; c.fillStyle = color;
       c.strokeText(text, x, y); c.fillText(text, x, y);
     };
     const line = (a, b, color) => {
       if (!valid(a) || !valid(b)) return;
       const p = point(a), q = point(b);
-      c.beginPath(); c.setLineDash([7, 6]); c.strokeStyle = color; c.lineWidth = 2;
+      c.beginPath(); c.setLineDash([6, 7]); c.strokeStyle = color; c.lineWidth = 1.5;
       c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); c.setLineDash([]);
     };
-    const { pickup, destination, target, quest } = this.courier, player = this.game.flight.pos;
-    line(pickup?.pos, destination?.pos, '#d5bd8580'); line(player, target?.pos, COLORS.target);
-    const marker = (p, kind, text) => {
+    const { pickup, destination } = this.courier, target = this.target(), player = this.game.flight.pos;
+    const publicStop = p => this.courier.quest.status !== 'completed' && p && (!p.hidden || this.atlas.isKnown(p));
+    if (publicStop(pickup) && publicStop(destination)) line(pickup.pos, destination.pos, '#dfc39180');
+    line(player, target?.pos, COLORS.target);
+    const marker = (p, kind, text, edge = false, selected = false) => {
       if (!valid(p)) return;
-      const raw = point(p), x = clamp(raw.x, 14, w - 14), y = clamp(raw.y, 14, h - 14);
-      const off = x !== raw.x || y !== raw.y;
-      c.save(); c.translate(x, y); c.fillStyle = COLORS[kind]; c.strokeStyle = '#152e2c'; c.lineWidth = 3; c.beginPath();
-      if (kind === 'player') { c.rotate(this.game.flight.yaw || 0); c.moveTo(0, -11); c.lineTo(8, 8); c.lineTo(0, 4); c.lineTo(-8, 8); c.closePath(); }
-      else if (kind === 'pickup') c.rect(-6, -6, 12, 12);
-      else if (kind === 'destination') { c.moveTo(0, -8); c.lineTo(8, 0); c.lineTo(0, 8); c.lineTo(-8, 0); c.closePath(); }
-      else { c.arc(0, 0, 11, 0, Math.PI * 2); c.stroke(); c.strokeStyle = COLORS.target; c.lineWidth = 3; c.stroke(); }
-      if (kind !== 'target') { c.stroke(); c.fill(); }
-      c.restore(); label(`${text}${off ? '（图外）' : ''}`, x + 16, y - 14, COLORS[kind], { x, y });
+      const raw = point(p);
+      if (!edge && (raw.x < 0 || raw.x > w || raw.y < 0 || raw.y > h)) return;
+      const x = clamp(raw.x, 14, w - 14), y = clamp(raw.y, 14, h - 14), off = x !== raw.x || y !== raw.y;
+      c.save(); c.translate(x, y); c.fillStyle = COLORS[kind]; c.strokeStyle = '#172f34'; c.lineWidth = 3;
+      if (selected) { c.beginPath(); c.strokeStyle = '#ffc979'; c.lineWidth = 2; c.arc(0, 0, 13, 0, Math.PI * 2); c.stroke(); c.strokeStyle = '#172f34'; }
+      c.beginPath();
+      if (kind === 'player') { c.rotate(this.game.flight.yaw || 0); c.moveTo(0, -10); c.lineTo(7, 7); c.lineTo(0, 3); c.lineTo(-7, 7); c.closePath(); }
+      else if (kind === 'pickup' || kind === 'landing') c.rect(-5, -5, 10, 10);
+      else if (kind === 'destination' || kind === 'place') { c.moveTo(0, -7); c.lineTo(7, 0); c.lineTo(0, 7); c.lineTo(-7, 0); c.closePath(); }
+      else if (kind === 'pin') { c.moveTo(-6, 0); c.lineTo(6, 0); c.moveTo(0, -6); c.lineTo(0, 6); }
+      else c.arc(0, 0, kind === 'target' ? 11 : 5, 0, Math.PI * 2);
+      c.stroke();
+      if (kind === 'target' || kind === 'town' || kind === 'pin') { c.strokeStyle = COLORS[kind]; c.lineWidth = 2; c.stroke(); }
+      else c.fill();
+      c.restore();
+      if (text) label(`${text}${off && edge ? '（图外）' : ''}`, x + 14, y - 12, COLORS[kind]);
     };
-    marker(target?.pos, 'target', `目标 · ${target?.name || '停靠点'}`);
-    marker(player, 'player', '你在这里');
-    if (pickup && pickup !== target) marker(pickup.pos, 'pickup', '取件点');
-    if (destination && destination !== target) marker(destination.pos, 'destination', '收件点');
-    for (const t of this.game.terrain.meta.towns || []) {
-      const p = point(t);
-      if (p.x < 0 || p.x > w || p.y < 0 || p.y > h) continue;
-      c.beginPath(); c.strokeStyle = '#fff8ec50'; c.lineWidth = 1; c.arc(p.x, p.y, Math.max(4, t.r * scale), 0, Math.PI * 2); c.stroke();
-      label(t.name, p.x + 7, p.y + 22, '#f0e6cb');
+    // Priority labels go first; filtered/undiscovered landmarks never reach the painter.
+    marker(target?.pos, 'target', `目标 · ${target?.name || '停靠点'}`, true);
+    marker(player, 'player', '你在这里', true);
+    for (const item of this.visibleItems()) {
+      const selected = this.selection?.id === item.id;
+      const labelVisible = item.kind !== 'landing' || v.span < this.world / 3 || selected;
+      marker(item.pos, item.kind, labelVisible && target?.pos !== item.pos ? item.name : '', false, selected);
     }
+    if (publicStop(pickup) && pickup !== target) marker(pickup.pos, 'pickup', '取件点', true);
+    if (publicStop(destination) && destination !== target) marker(destination.pos, 'destination', '收件点', true);
+    if (this.draft) marker(this.draft.pos, 'pin', this.draft.name, false, true);
     const metres = 10 ** Math.floor(Math.log10(90 / scale)), length = metres * scale;
-    c.strokeStyle = COLORS.player; c.lineWidth = 2; c.beginPath(); c.moveTo(16, h - 18); c.lineTo(16 + length, h - 18); c.stroke();
-    c.font = '12px "PingFang SC", sans-serif'; c.fillStyle = COLORS.player; c.fillText(`${metres} 米`, 16, h - 25);
-    const status = { available: '待取件', active: '配送中', completed: '订单已完成' }[quest?.status] || '自由航行';
-    this.dialog.querySelector('.wm-order').textContent = target
-      ? `${status} · 当前目标：${target.name} · ${target.spot || '停靠平台'}｜平台高度 ${target.pos.y.toFixed(2)} 米（世界 Y）；请对准平台，勿降至下方地面。`
-      : `${status} · 暂无当前目标，自由探索全岛。`;
-    this.dialog.querySelector('.wm-position').textContent = `玩家 X ${player.x.toFixed(1)} / Z ${player.z.toFixed(1)} · 高度 ${player.y.toFixed(2)} 米` +
-      (target ? `｜目标 X ${target.pos.x.toFixed(1)} / Z ${target.pos.z.toFixed(1)} · 水平距离 ${Math.hypot(target.pos.x - player.x, target.pos.z - player.z).toFixed(0)} 米 · 高差 ${(target.pos.y - player.y).toFixed(2)} 米` : '');
-    this.dialog.querySelector('output').textContent = `${(this.world * 1.08 / v.span).toFixed(1)}×`;
+    c.strokeStyle = COLORS.player; c.lineWidth = 2; c.beginPath(); c.moveTo(16, h - 17); c.lineTo(16 + length, h - 17); c.stroke();
+    c.font = '12px system-ui, sans-serif'; c.fillStyle = COLORS.player; c.fillText(`${metres} 米`, 16, h - 25);
+  }
+  renderZoom() {
+    const v = this.zoomTarget || this.view;
+    this.dialog.querySelector('output').textContent = `${(this.world * 1.08 / this.view.span).toFixed(1)}×`;
     this.dialog.querySelector('[data-action="in"]').disabled = v.span <= this.world / 24;
     this.dialog.querySelector('[data-action="out"]').disabled = v.span >= this.world * 1.08;
+  }
+  renderUI() {
+    const q = selector => this.dialog.querySelector(selector), atlas = this.atlas, player = this.game.flight.pos, target = this.target();
+    this.dialog.dataset.theme = atlas.theme;
+    q('[data-action="theme"]').textContent = atlas.theme === 'dark' ? '浅色航图' : '深色航图';
+    q('[data-action="theme"]').setAttribute('aria-pressed', String(atlas.theme === 'light'));
+    for (const kind of Object.keys(KINDS)) q(`[data-filter="${kind}"]`).setAttribute('aria-pressed', String(atlas.filters[kind]));
+    const status = { available: '待取件', active: '配送中', completed: '订单已完成' }[this.courier.quest?.status] || '自由航行';
+    const pad = target && (target.pad || target === this.courier.target || atlas.landmarks.some(item => item.pad === target && atlas.isKnown(item)));
+    q('.wm-order').textContent = target ? `${status} · ${target.name} · ${pad ? `${target.spot || '停靠平台'}｜平台高度` : '导航高度'} ${target.pos.y.toFixed(2)} 米（世界 Y）${pad ? '；请对准平台，勿降至下方地面。' : '；仅作方向参考。'}` : `${status} · 暂无当前目标，自由探索全岛。`;
+    q('[data-action="quest"]').disabled = !this.courier.target || atlas.tracking?.kind === 'quest';
+    q('[data-action="stop"]').disabled = !atlas.tracking;
+    q('[data-action="route"]').disabled = !target;
+    q('.wm-position').textContent = `玩家 X ${player.x.toFixed(1)} / Z ${player.z.toFixed(1)} · 高度 ${player.y.toFixed(2)} 米` +
+      (target ? `｜目标 X ${target.pos.x.toFixed(1)} / Z ${target.pos.z.toFixed(1)} · 水平距离 ${Math.hypot(target.pos.x - player.x, target.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(target.pos.y - player.y)} 米` : '');
+    q('.wm-progress-text').textContent = `${atlas.percent.toFixed(1)}%`;
+    q('progress').value = atlas.percent;
+    q('.wm-discoveries').textContent = `已发现 ${atlas.discovered.size} 处 · 探索奖励 ${atlas.coins} 风铃币`;
+    const full = atlas.pins.length >= PIN_LIMIT;
+    q('[data-action="add-pin"]').disabled = full;
+    q('[data-action="add-pin"]').setAttribute('aria-pressed', String(this.addingPin));
+    q('[data-action="add-pin"]').textContent = this.addingPin ? '取消添加' : '＋ 添加标记';
+    q('.wm-pin-status').textContent = this.addingPin ? '点击地形选择位置；拖动只平移，不会添加标记。' : full ? '标记 12 / 12 · 已达上限，请先删除一个。' : `标记 ${atlas.pins.length} / 12 · 仅用于导航`;
+    this.canvas.classList.toggle('adding-pin', this.addingPin);
+    this.renderDetails(); this.renderList(); this.renderZoom();
+  }
+  renderDetails() {
+    const q = selector => this.dialog.querySelector(selector), item = this.draft || this.selected(), player = this.game.flight.pos;
+    q('.wm-detail-kind').textContent = item ? `${KINDS[item.kind][0]} ${KINDS[item.kind][1]}${this.draft ? ' / 新标记' : ''}` : '地点详情';
+    q('.wm-detail-name').textContent = item?.name || '选择一处地点';
+    q('.wm-detail-description').textContent = item?.description || (item ? '记录位置，规划下一段航行。' : '点击地图符号或下方地点列表，查看距离与高度。');
+    q('.wm-detail-coordinates').textContent = item ? `X ${item.pos.x.toFixed(1)} / Z ${item.pos.z.toFixed(1)}\n${item.pad ? '平台高度' : '位置高度'} ${item.pos.y.toFixed(2)} 米（世界 Y）\n水平距离 ${Math.hypot(item.pos.x - player.x, item.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(item.pos.y - player.y)} 米` : '';
+    q('.wm-detail-warning').textContent = item?.kind === 'pin' ? '自定义标记仅用于导航，不是停靠平台；高度来自此处地形 / 海面。' : item?.pad ? '请对准真实平台高度，勿降至下方地面。' : '';
+    const tracked = item?.id && this.atlas.tracking?.id === item.id && this.atlas.tracking?.kind === this.selection?.kind;
+    q('[data-action="track"]').disabled = !item || !!this.draft || !!tracked;
+    q('[data-action="track"]').textContent = tracked ? '正在追踪' : '追踪地点';
+    q('[data-action="focus"]').disabled = !item || !!this.draft;
+    q('.wm-pin-editor').hidden = item?.kind !== 'pin';
+    q('[data-action="delete-pin"]').hidden = !!this.draft;
+    q('[data-action="cancel-pin"]').hidden = !this.draft;
+    q('[data-action="save-pin"]').textContent = this.draft ? '保存标记' : '保存名称';
+    q('[data-action="save-pin"]').disabled = !!this.draft && this.atlas.pins.length >= PIN_LIMIT;
+    const key = item?.kind === 'pin' ? this.draft ? 'draft' : item.id : null;
+    if (key !== this.editorKey) { q('#wm-pin-name').value = item?.name || ''; this.editorKey = key; }
+  }
+  renderList() {
+    const list = this.dialog.querySelector('.wm-places'), items = this.visibleItems();
+    const signature = JSON.stringify(items.map(p => [p.id, p.kind, p.name]));
+    if (signature !== this.listSignature) {
+      list.replaceChildren(); this.rows = [];
+      for (const item of items) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'wm-place'; button.dataset.id = item.id;
+        button.dataset.kind = item.kind === 'pin' ? 'pin' : 'landmark';
+        const symbol = document.createElement('span'), name = document.createElement('span'), kind = document.createElement('small');
+        symbol.className = `wm-symbol wm-symbol-${item.kind}`; symbol.textContent = KINDS[item.kind][0]; symbol.setAttribute('aria-hidden', 'true');
+        name.textContent = item.name; kind.textContent = KINDS[item.kind][1]; button.append(symbol, name, kind); list.appendChild(button); this.rows.push(button);
+      }
+      this.listSignature = signature;
+    }
+    for (const row of this.rows) row.setAttribute('aria-pressed', String(row.dataset.id === this.selection?.id && row.dataset.kind === this.selection?.kind));
+    this.dialog.querySelector('.wm-count').textContent = String(items.length);
+    this.dialog.querySelector('.wm-empty').hidden = items.length !== 0;
   }
 }

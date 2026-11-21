@@ -18,6 +18,7 @@ const { ChaseCamera } = await import('../player/camera.js');
 const { Rider } = await import('../player/rider.js');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 const { Input } = await import('../player/input.js');
+const { SaveService } = await import('../core/save.js');
 const { groundAnchor, WALK, JUMP } = await import('./ground.js');
 const near = (a, b, eps = 1e-7) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 const idle = { turn: 0, pitch: 0, boost: false, brake: false, walkX: 0, walkZ: 0 };
@@ -31,7 +32,7 @@ function fixture(pads = []) {
   flight.pos.set(0, 30, 0); flight.vel.set(0, 0, -20); flight.speed = 20;
   const camera = new THREE.PerspectiveCamera(); camera.position.set(0, 16, 6);
   const messages = [], pressed = new Set();
-  const g = { state: 'play', terrain, flight, camera, chase: new ChaseCamera(camera, flight),
+  const g = { state: 'play', save: new SaveService(null), terrain, flight, camera, chase: new ChaseCamera(camera, flight),
     rider: { standing: {}, seat: {}, off: {}, sunVis: 1, restHeight: () => 0.5, async loadStand() {} },
     fx: { sunTint: () => [1, 1, 1], sprites: { spawn() {} }, burst() {}, env: { surface: () => 10 } },
     world: new THREE.Group(), pipeline: { overlay: new THREE.Group() },
