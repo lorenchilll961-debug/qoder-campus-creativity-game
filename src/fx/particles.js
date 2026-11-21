@@ -491,7 +491,7 @@ export class Snowfall {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     this.material = new THREE.ShaderMaterial({
       uniforms: {
-        ...shared('uTime', 'uSeasonSnow', 'uWind', 'uHeightTex', 'uWorld'),
+        ...shared('uTime', 'uSeasonSnowfall', 'uWind', 'uHeightTex', 'uWorld'),
         tDepth: depthUniform,
         uDepth: { value: new THREE.Vector3() },
         uRes: { value: new THREE.Vector2() },
@@ -506,7 +506,7 @@ export class Snowfall {
         void main(){
           vec3 extent = vec3(80.0, 48.0, 80.0);
           float phase = position.z * 6.2831853;
-          vec3 drift = vec3(uWind.x * uTime * 1.4, -uTime * (1.5 + position.y * 1.8), uWind.y * uTime * 1.4);
+          vec3 drift = vec3(uWind.x * uWind.z * uTime * 1.4, -uTime * (1.5 + position.y * 1.8), uWind.y * uWind.z * uTime * 1.4);
           drift.x += sin(uTime * 0.8 + phase) * 0.65;
           drift.z += cos(uTime * 0.6 + phase) * 0.65;
           // World-anchored wrapping keeps the snow field populated during fast flight.
@@ -525,7 +525,7 @@ export class Snowfall {
         uniform sampler2D tDepth;
         uniform vec3 uDepth;
         uniform vec2 uRes;
-        uniform float uSeasonSnow;
+        uniform float uSeasonSnowfall;
         varying float vFade;
         varying float vViewZ;
         void main(){
@@ -534,7 +534,7 @@ export class Snowfall {
           float d = texture(tDepth, gl_FragCoord.xy / uRes).r;
           float scene = uDepth.z > 0.5 ? uDepth.x * uDepth.y / (uDepth.x + d * (uDepth.y - uDepth.x))
                                        : uDepth.x * uDepth.y / (uDepth.y - d * (uDepth.y - uDepth.x));
-          float alpha = shape * vFade * uSeasonSnow * clamp((scene - vViewZ) / 0.3, 0.0, 1.0);
+          float alpha = shape * vFade * uSeasonSnowfall * clamp((scene - vViewZ) / 0.3, 0.0, 1.0);
           if (alpha < 0.003) discard;
           gl_FragColor = vec4(2.2, 2.3, 2.4, alpha * 0.9);
         }
@@ -549,7 +549,7 @@ export class Snowfall {
   }
 
   update(camera, size, reversed) {
-    this.mesh.visible = U.uSeasonSnow.value > 0;
+    this.mesh.visible = U.uSeasonSnowfall.value > 0;
     if (!this.mesh.visible) return;
     this.material.uniforms.uDepth.value.set(camera.near, camera.far, reversed ? 1 : 0);
     this.material.uniforms.uRes.value.copy(size);

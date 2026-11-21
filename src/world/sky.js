@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { U, shared } from '../core/ctx.js';
 import { NOISE, ATMOSPHERE } from '../shaders/common.js';
 
-export const SKY_UNIFORMS = ['uSunDir', 'uSunColor', 'uSkyZenith', 'uSkyMid', 'uSkyHorizon', 'uSunHalo', 'uAmbSky', 'uAmbGround', 'uFog', 'uCamPos'];
+export const SKY_UNIFORMS = ['uSunDir', 'uSunColor', 'uSkyZenith', 'uSkyMid', 'uSkyHorizon', 'uSunHalo', 'uAmbSky', 'uAmbGround', 'uFog', 'uCamPos', 'uClimate', 'uWeather'];
 
 const tri = () => {
   const g = new THREE.BufferGeometry();
@@ -27,7 +27,20 @@ vec4 sampleClouds(vec3 d){
   // manual gradients avoid the seam at the azimuth wrap
   vec2 dx = dFdx(uv), dy = dFdy(uv);
   dx.x -= floor(dx.x + 0.5); dy.x -= floor(dy.x + 0.5);
-  return textureGrad(uCloudTex, uv, dx, dy);
+  vec4 baked = textureGrad(uCloudTex, uv, dx, dy);
+  // Never rebake the static layer. Zero strength preserves even its premultiplied RGB exactly.
+  float strength = clamp(uClimate.x, 0.0, 1.0);
+  float cover = clamp(uWeather.y, 0.0, 1.0) * strength;
+  if (cover <= 0.0) return baked;
+  float overcast = smoothstep(0.30, 0.90, cover);
+  float veil = cover * (0.34 + 0.56 * overcast) * (0.80 + 0.20 * baked.a);
+  float alpha = baked.a + (1.0 - baked.a) * veil;
+  vec3 grey = (uAmbSky * 0.95 + uSunColor * 0.075) * vec3(0.88, 0.93, 1.0);
+  grey *= 1.0 - 0.28 * clamp(uWeather.x, 0.0, 1.0);
+  // Tint occupied cloud texels in premultiplied space; fill gaps with the same grey radiance.
+  vec3 rgb = mix(baked.rgb, grey * baked.a, overcast * 0.86);
+  rgb += grey * (alpha - baked.a);
+  return vec4(rgb, alpha);
 }
 `;
 

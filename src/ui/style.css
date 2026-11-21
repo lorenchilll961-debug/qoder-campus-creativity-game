@@ -45,12 +45,28 @@ kbd {
 #hud.quiet { opacity: 0; }
 .season-panel {
   position: absolute; left: 30px; bottom: 100px; width: 258px; padding: 14px 16px;
+  max-height: calc(100dvh - 210px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
   border: 1px solid rgba(255, 248, 236, 0.24); border-radius: 14px; pointer-events: auto;
   background: rgba(14, 28, 30, 0.78); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 #hud.quiet .season-panel { visibility: hidden; pointer-events: none; }
 .season-heading { display: flex; justify-content: space-between; align-items: center; font-size: 16px; letter-spacing: 0.12em; }
 .season-stage { font-size: 10px; opacity: 0.65; letter-spacing: 0.06em; }
+.season-modes { display: flex; gap: 6px; margin-top: 12px; }
+.season-modes button { flex: 1; padding: 7px 2px; font-size: 11px; }
+.season-modes button, .term-navigation button, #solarTerm {
+  font-family: inherit; color: var(--ink); background: transparent;
+  border: 1px solid rgba(255, 248, 236, 0.25); border-radius: 8px; cursor: pointer;
+}
+.season-modes button[aria-pressed="true"] { color: #25342e; background: #eee7ce; border-color: #eee7ce; }
+.season-modes button:hover, .term-navigation button:hover, #solarTerm:hover { border-color: var(--gold); }
+.season-modes button:focus-visible, .term-navigation button:focus-visible, #solarTerm:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.term-controls { margin: 10px 0; }
+.term-controls label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; opacity: 0.8; }
+.term-navigation { display: flex; gap: 6px; }
+.term-navigation button { flex: 0 0 30px; font-size: 22px; }
+#solarTerm { flex: 1; min-width: 0; padding: 7px 8px; font-size: 13px; background: #1c302e; }
+#solarTerm optgroup, #solarTerm option { color: var(--ink); background: #1c302e; }
 .season-options { display: flex; gap: 6px; margin: 12px 0 10px; }
 .season-options button {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 8px 2px;
@@ -62,6 +78,13 @@ kbd {
 .season-options button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .season-options kbd { padding: 0; min-width: 10px; margin: 0; border: 0; background: none; opacity: 0.65; font-size: 10px; }
 .season-panel p { margin: 6px 0; font-size: 12px; line-height: 1.6; }
+.season-panel .term-marker { color: var(--gold); font-size: 11px; }
+.term-details { margin: 8px 0; padding-top: 8px; border-top: 1px solid rgba(255, 248, 236, 0.18); }
+.term-details summary { cursor: pointer; font-size: 11px; }
+.term-details summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.term-details dl { display: grid; grid-template-columns: 28px 1fr; gap: 6px; font-size: 11px; line-height: 1.6; }
+.term-details dt { opacity: 0.65; }
+.term-details dd { margin: 0; }
 #seasonStatus { opacity: 0.8; font-size: 11px; }
 #seasonProgress { display: block; width: 100%; height: 3px; margin: 9px 0; border: 0; accent-color: #ddc78f; }
 #seasonProgress::-webkit-progress-bar { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
@@ -72,7 +95,7 @@ kbd {
   .season-heading { font-size: 14px; }
   .season-options { margin: 8px 0; }
   .season-options button { padding: 6px 2px; }
-  .season-panel small { display: none; }
+  .season-panel > small { display: none; }
 }
 .hud-tl { position: absolute; left: 30px; top: 26px; }
 .seeds { display: flex; align-items: baseline; gap: 8px; font-family: "LXGW WenKai", serif; font-size: 34px; font-style: normal; }

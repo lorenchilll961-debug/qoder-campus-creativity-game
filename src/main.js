@@ -24,6 +24,7 @@ import { Sound } from './audio/audio.js';
 import { Gameplay } from './game/index.js';
 import { Seasons } from './seasons/index.js';
 import { SEASONS } from './seasons/cycle.js';
+import { SeasonWeather } from './seasons/weather.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -171,6 +172,7 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
+  game.weather = new SeasonWeather(game);
 
   resize();
   setLoad(1);
@@ -347,6 +349,7 @@ function render(dt) {
   if (!pipeline.sceneRT) { resize(); if (!pipeline.sceneRT) return; }
   camera.updateMatrixWorld();
   U.uCamPos.value.copy(camera.position);
+  game.weather.prepare(camera, pipeline.size, pipeline.reversed);
   game.rider.renderShadow(pipeline.reversed);
   game.water.renderReflection(camera, pipeline.size);
   game.terrain.select(game.terrain.mainView, camera);

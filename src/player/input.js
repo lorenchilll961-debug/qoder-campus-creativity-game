@@ -23,7 +23,7 @@ export class Input {
     this._padTrick = false;
 
     window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+      if (e.repeat || e.target.closest?.('button, select, input, textarea, summary, [contenteditable]:not([contenteditable="false"])')) return;
       this.keys.add(e.code);
       this.pressed.add(e.code);
       if (e.code === 'Space') this._tapBrake(e.timeStamp);
