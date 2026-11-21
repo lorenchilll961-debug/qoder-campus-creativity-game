@@ -272,7 +272,7 @@ export class Terrain {
       uniforms: {
         ...shared(...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uTintTex', 'uWorld', 'uNoiseTex', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uWakeTex', 'uWake', 'uStripTex',
           'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
-          'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather'),
+          'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonWither', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather'),
         uGrid: { value: GRID },
         uLodRange: { value: LOD_RANGE },
         uLodAlt: { value: 0 },
@@ -509,12 +509,14 @@ void main(){
   Mat mg2 = sampS(L_GROUND, P.xz / 9.7 + 0.37, dPx.xz / 9.7, dPy.xz / 9.7);
   vec3 tint = meadowTint(P.xz, wet);
   vec3 gDetail = mix(mg.c / uMean[3], mg2.c / uMean[3], 0.45);
+  // dead sward keeps no green in its texture: only the luminance relief survives
+  gDetail = mix(gDetail, vec3(dot(gDetail, vec3(0.3333))), uSeasonWither * 0.8);
   // close up we look between the blades at shaded thatch; far away this stands in for the whole sward
   // grass clinging to steep ground and ledges is short, wind-burnt and darker
   float steepK = max(smoothstep(0.06, 0.24, slope), smoothstep(0.25, 0.8, cliffy) * 0.85);
-  tint = mix(tint, vec3(0.135, 0.170, 0.060) * uSeasonGrass, steepK * 0.7);
+  tint = mix(tint, mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.44, 0.365, 0.20), uSeasonWither), steepK * 0.7);
   vec3 swardFar = tint * 1.22 + vec3(0.010, 0.026, 0.0);
-  vec3 swardNear = tint * 0.62 * gDetail;
+  vec3 swardNear = tint * mix(0.62, 0.86, uSeasonWither) * gDetail;
   // seen from afar the sward is tussocks, hollows and wind-combed patches, not a flat wash
   float mott = ntexA(P.xz * 0.55).r * 0.5 + nzA.b * 0.3 + nzB.a * 0.2;
   swardFar *= 0.70 + 0.62 * mott;
@@ -677,7 +679,9 @@ void main(){
     // Frozen soil stays dark and granular: it is not a pale snow/frost blanket.
     float frozen = uSurfaceWeather.w * exposed * (1.0 - rockAmt) * (1.0 - lowW) * (1.0 - max(town.r, town.g));
     float grain = 0.70 + 0.30 * smoothstep(0.24, 0.76, nzC.r * 0.6 + m.h * 0.4);
-    m.c *= mix(vec3(1.0), vec3(0.70, 0.79, 0.91) * grain, frozen);
+    // the dead sward keeps its straw tone under the freeze instead of turning blue-grey
+    vec3 frozenC = mix(vec3(0.70, 0.79, 0.91), vec3(0.92, 0.88, 0.78), uSeasonWither);
+    m.c *= mix(vec3(1.0), frozenC * grain, frozen);
   }
   if (uSurfaceWeather.z > 0.0){
     // Sparse crystals on exposed high points; no normal smoothing or snow accumulation.

@@ -10,7 +10,7 @@ import { SKY_UNIFORMS } from './sky.js';
 
 const SHARED = [...SKY_UNIFORMS, 'uTime', 'uHeightTex', 'uSplatTex', 'uLightTex', 'uWorld', 'uNoiseTex', 'uWakeTex', 'uWake', 'uWind', 'uShadowTex', 'uShadowMat', 'uShadowOn', 'uRider', 'uStripTex',
   'uTownSh0', 'uTownSh1', 'uTownShM0', 'uTownShM1', 'uTownShP', 'uTownMask0', 'uTownMask1', 'uTownRect0', 'uTownRect1',
-  'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather', 'uPhenology'];
+  'uSeasonGrass', 'uSeasonLeaves', 'uSeasonBloom', 'uSeasonSnow', 'uSeasonBare', 'uSeasonWither', 'uSeasonPastel', 'uSeasonGoldBloom', 'uSurfaceWeather', 'uPhenology'];
 
 // ----------------------------------------------------------------------------------------
 // shell definitions. fade = [in0, in1, out0, out1] (metres from camera)
@@ -150,7 +150,7 @@ void main(){
   // ragged edges: blades thin out before the sward ends
   // Climate is opt-in. Cold/early growth reads as short, open shoots, not flowers.
   float growth = smoothstep(2.0, 24.0, uClimate.y) * (0.70 + 0.30 * clamp(uPhenology.x, 0.0, 1.0));
-  float density = mix(1.0, 0.68 + 0.36 * growth, clamp(uClimate.x, 0.0, 1.0));
+  float density = mix(1.0, 0.68 + 0.36 * growth, clamp(uClimate.x, 0.0, 1.0)) * mix(1.0, 0.82, uSeasonWither);
   float keep = step(rnd.z, cover * 1.25 * density) * smoothstep(0.02, 0.5, cover);
   float fade = lodFade(d) * keep * (1.0 - uSeasonSnow);
   // nothing to draw here (bare ground, or outside this shell): skip the wind and wake lookups
@@ -163,6 +163,8 @@ void main(){
   // flowers shade out the grass a little so the heads stand proud
   hgt *= 1.0 - 0.22 * splat.r;
   hgt *= mix(1.0, 0.56 + 0.56 * growth, clamp(uClimate.x, 0.0, 1.0));
+  // dead winter sward is down to stubble, so the ground's straw shows between the blades
+  hgt *= mix(1.0, 0.55, uSeasonWither);
   float wid = uBlade.x * mix(0.7, 1.25, rnd.x);
 
   // ---- wind + wake
@@ -205,7 +207,7 @@ void main(){
   vNormal = n;
   vInfo = vec4(t, rnd.w, gust, light.r);
   // on cliff ledges the sward is short, wind-burnt and darker (matches the far-field ground)
-  vTint = mix(meadowTint(xz, wet), vec3(0.135, 0.170, 0.060) * uSeasonGrass, smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
+  vTint = mix(meadowTint(xz, wet), mix(vec3(0.135, 0.170, 0.060) * uSeasonGrass, vec3(0.44, 0.365, 0.20), uSeasonWither), smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
   vAux = vec2(light.g, min(wk.z, 1.0));
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }
@@ -216,6 +218,7 @@ precision highp float;
 uniform float uTime;
 uniform float uRoot;
 uniform float uSeasonSnow;
+uniform float uSeasonWither;
 uniform vec4 uSurfaceWeather;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -238,6 +241,7 @@ void main(){
   vec3 tipC = vTint * mix(1.30, 1.62, uRoot) + vec3(0.050, 0.060, 0.004) * uRoot;
   vec3 alb = mix(rootC, tipC, pow(t, 1.25)) * mix(0.84, 1.16, vInfo.y);
   alb = mix(alb, vec3(0.50, 0.46, 0.20), smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
+  alb = mix(alb, alb * vec3(1.18, 1.05, 0.78), uSeasonWither);   // dead blades have no green left to cool
 
   // Only scattered upper tips carry crystalline rime; the blade remains green/brown below it.
   float frostTip = uSurfaceWeather.z * smoothstep(0.76, 0.98, t) * smoothstep(0.58, 0.84, vInfo.y);
@@ -249,14 +253,14 @@ void main(){
   float dif = saturate(ndl * 0.55 + 0.45);
   // light pouring through the blades when you look toward the sun
   float back = pow(saturate(dot(V, -uSunDir) * 0.5 + 0.5), 4.0);
-  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t) * (1.0 - uSeasonSnow);
+  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t) * (1.0 - uSeasonSnow) * mix(1.0, 0.35, uSeasonWither);
   float ao = mix(mix(0.85, 0.24, uRoot), 1.0, smoothstep(0.0, 0.75, t)) * vAux.x;
   vec3 col = alb * (uSunColor * dif * sh * mix(mix(0.95, 0.55, uRoot), 1.0, t)) + trans * uSunColor * sh * 0.33;
   col += alb * mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * ao;
   // glossy sheen that rides the gust fronts
   vec3 H = normalize(uSunDir + V);
   float spec = pow(saturate(dot(N, H)), 26.0) * (0.10 + 0.34 * vInfo.z) * smoothstep(0.15, 0.7, t);
-  col += uSunColor * spec * sh * 0.22;
+  col += uSunColor * spec * sh * 0.22 * mix(1.0, 0.2, uSeasonWither);
   if (uSurfaceWeather.y > 0.0 || uSurfaceWeather.z > 0.0){
     // Isolated beads on different points of different blades; no white dew overlay.
     float dropT = 0.77 + 0.19 * fract(vInfo.y * 37.13);

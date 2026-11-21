@@ -134,6 +134,14 @@ export const MEADOW = /* glsl */`
 ${SEASON}
 uniform float uSeasonPastel;
 uniform float uSeasonGoldBloom;
+uniform float uSeasonWither;
+// Dead sward left from the cold season: straw tones streaked with dry patches, no green in it.
+vec3 seasonDeadSward(vec2 xz){
+  float a = vnoise(xz * 0.0093 + 4.0);
+  float b = vnoise(xz * 0.041 - 2.0);
+  float streak = smoothstep(0.24, 0.80, a * 0.55 + b * 0.45);
+  return mix(vec3(0.44, 0.355, 0.165), vec3(0.86, 0.72, 0.400), streak);
+}
 vec3 seasonGoldPetal(vec3 color){
   float lightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
   vec3 gold = mix(vec3(0.92, 0.43, 0.025), vec3(1.0, 0.85, 0.16), lightness);
@@ -155,7 +163,8 @@ vec3 meadowTint(vec2 xz, float wet){
   vec3 col = mix(lush, fresh, smoothstep(0.22, 0.78, a * 0.6 + b * 0.4));
   col = mix(col, dry, smoothstep(0.38, 0.80, b * 0.5 + c * 0.5) * (1.0 - wet) * 0.85);
   col = mix(col, lush * 0.92, wet * 0.65);
-  return col * uSeasonGrass;
+  col *= uSeasonGrass;
+  return mix(col, seasonDeadSward(xz), uSeasonWither);
 }
 
 // Flower species palette. s = species field (0..1), r = per-flower random.

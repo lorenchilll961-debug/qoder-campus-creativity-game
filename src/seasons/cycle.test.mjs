@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { SeasonCycle, SEASONS, SOLAR_TERMS, CLIMATE_DEFAULTS, TRANSITION_SECONDS } from './cycle.js';
 
 const EXPECTED = [
-  { id: 'spring', name: '春', grass: [1.55, 1.8, 0.82], leaves: [1.5, 1.7, 0.78], bloom: 1, snow: 0, pastel: 1, bare: 0, snowfall: 0 },
-  { id: 'summer', name: '夏', grass: [1, 1, 1], leaves: [1, 1, 1], bloom: 1, snow: 0, pastel: 0, bare: 0, snowfall: 0 },
-  { id: 'autumn', name: '秋', grass: [2.3, 0.82, 0.48], leaves: [2.6, 0.72, 0.32], bloom: 0.18, snow: 0, pastel: 0, bare: 0, snowfall: 0 },
-  { id: 'winter', name: '冬', grass: [0.82, 0.85, 0.96], leaves: [0.82, 0.87, 1.02], bloom: 0, snow: 1, pastel: 0, bare: 1, snowfall: 1 },
+  { id: 'spring', name: '春', grass: [1.55, 1.8, 0.82], leaves: [1.5, 1.7, 0.78], bloom: 1, snow: 0, pastel: 1, bare: 0, snowfall: 0, wither: 0 },
+  { id: 'summer', name: '夏', grass: [1, 1, 1], leaves: [1, 1, 1], bloom: 1, snow: 0, pastel: 0, bare: 0, snowfall: 0, wither: 0 },
+  { id: 'autumn', name: '秋', grass: [2.3, 0.82, 0.48], leaves: [2.6, 0.72, 0.32], bloom: 0.18, snow: 0, pastel: 0, bare: 0, snowfall: 0, wither: 0.3 },
+  { id: 'winter', name: '冬', grass: [1.8, 0.82, 0.52], leaves: [1.75, 0.8, 0.5], bloom: 0, snow: 1, pastel: 0, bare: 1, snowfall: 1, wither: 1 },
 ].map((season) => ({ ...season, climate: { ...CLIMATE_DEFAULTS } }));
 
-const SCALARS = ['bloom', 'snow', 'pastel', 'bare', 'snowfall'];
+const SCALARS = ['bloom', 'snow', 'pastel', 'bare', 'snowfall', 'wither'];
 const CLIMATE_RANGES = {
   strength: [0, 1], temperature: [-50, 50], daylight: [0, 24],
   rain: [0, 1], cloud: [0, 1], fog: [0, 1], thunder: [0, 1], wetness: [0, 1], dew: [0, 1],
@@ -30,8 +30,8 @@ const EXPECTED_TERMS = [
   ['dongzhi', '冬至'], ['xiaohan', '小寒'], ['dahan', '大寒'],
 ];
 
-function stateOf({ grass, leaves, bloom, snow, pastel, bare, snowfall, climate }) {
-  return { grass: [...grass], leaves: [...leaves], bloom, snow, pastel, bare, snowfall, climate: { ...climate } };
+function stateOf({ grass, leaves, bloom, snow, pastel, bare, snowfall, wither, climate }) {
+  return { grass: [...grass], leaves: [...leaves], bloom, snow, pastel, bare, snowfall, wither, climate: { ...climate } };
 }
 
 function values(state) {
