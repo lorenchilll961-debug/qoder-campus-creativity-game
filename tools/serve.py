@@ -67,5 +67,5 @@ class H(http.server.SimpleHTTPRequestHandler):
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 6280
 host = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
-print(f"Petalwake: http://{'localhost' if host == '127.0.0.1' else host}:{port}/", flush=True)
+print(f"花信风: http://{'localhost' if host == '127.0.0.1' else host}:{port}/", flush=True)
 http.server.ThreadingHTTPServer((host, port), functools.partial(H, directory=ROOT)).serve_forever()
