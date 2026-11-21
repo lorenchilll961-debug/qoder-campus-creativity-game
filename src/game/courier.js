@@ -40,7 +40,7 @@ export class Courier {
   start() {
     if (this.quest.progress.intro || !this.dialogue || !this.target) return;
     if (this.dialogue.show('欢迎成为云雀港信使',
-      '你的第一单，是帮商店老板阿岚，把新焙春茶送给露台茶馆的村民老林。\n\n扫帚会自动前进：A / D 转向，W 俯冲、S 爬升，按住空格减速，Shift 加速。\n按 M 看地图，循金光找到信使公会。靠近回廊后连按两次空格降落，按 E 与阿岚交谈。',
+      '你的第一单，是帮商店老板阿岚，把新焙春茶送给露台茶馆的村民老林。\n\n魔毯会自动前进：A / D 转向，W 俯冲、S 爬升，按住空格减速，Shift 加速。\n按 M 看地图，循金光找到信使公会。靠近回廊后连按两次空格降落，按 E 与阿岚交谈。',
       [{ label: '开始第一单' }])) this.quest.learn('intro');
   }
 
@@ -64,16 +64,16 @@ export class Courier {
       if (q.status === 'available') {
         if (!this.destination) return false;
         return this.dialogue.show(FIRST_ORDER.sender,
-          `茶馆的老林在等这包新茶。请把它送到露台茶馆的屋顶露台，不是楼下街道。\n\n报酬：${FIRST_ORDER.reward} 枚风铃币，并补满风势。接单后按空格骑上扫帚，再用 M 查看目标。`,
+          `茶馆的老林在等这包新茶。请把它送到露台茶馆的屋顶露台，不是楼下街道。\n\n报酬：${FIRST_ORDER.reward} 枚风铃币，并补满风势。接单后按 G 坐上魔毯，再用 M 查看目标。`,
           [{ label: '接下春茶订单', run: () => this.accept(pad) }, { label: '稍后再来' }]);
       }
       return this.dialogue.show(FIRST_ORDER.sender, q.carrying
-        ? '包裹已经交给你了。屋顶露台就在港口西侧，金色箭头会为你指路。按空格起飞，先把这一单送好。'
+        ? '包裹已经交给你了。屋顶露台就在港口西侧，金色箭头会为你指路。按 G 起飞，先把这一单送好。'
         : '第一单完成得很好！今天的委托已经送完，去岛上自在飞一会儿吧。');
     }
     if (q.status === 'completed') return this.dialogue.show(FIRST_ORDER.recipient, '新茶已经收到了，谢谢你！报酬已经记入风铃币，不会重复结算。');
     if (!q.carrying) return this.dialogue.show(FIRST_ORDER.recipient, '我在等公会的新茶。先去信使公会找阿岚接单，再带着包裹过来吧。');
-    if (!q.progress.fly) return this.dialogue.show(FIRST_ORDER.recipient, '这一单也是你的扫帚练习。请先骑上扫帚飞一小段，再回来交货。');
+    if (!q.progress.fly) return this.dialogue.show(FIRST_ORDER.recipient, '这一单也是你的魔毯练习。请先骑上魔毯飞一小段，再回来交货。');
     return this.dialogue.show(FIRST_ORDER.recipient,
       `风里都是新茶的香气！是公会托你送来的吧？\n\n交付：${FIRST_ORDER.parcel}\n报酬：${FIRST_ORDER.reward} 枚风铃币 · 风势补满`,
       [{ label: '交付春茶，领取报酬', run: () => this.deliver(pad) }, { label: '等一等' }]);
@@ -83,7 +83,7 @@ export class Courier {
     if (!this.quest.accept(pad.id, this.near(pad))) return false;
     this._flightStart = null;
     this._show();
-    this.hud.card('已接单', FIRST_ORDER.parcel, '空格起飞 · M 查看茶馆位置 · 降落后按 E 交货', 4);
+    this.hud.card('已接单', FIRST_ORDER.parcel, 'G 起飞 · M 查看茶馆位置 · 降落后按 E 交货', 4);
     return true;
   }
 
@@ -115,11 +115,11 @@ export class Courier {
 
   objective() {
     const q = this.quest, L = this.game.gameplay?.landing;
-    if (q.status === 'completed') return '第一单完成！空格起飞，继续探索海岛。M 随时查看世界地图。';
+    if (q.status === 'completed') return '第一单完成！G 起飞，继续探索海岛。M 随时查看世界地图。';
     if (!this.target) return '配送点暂不可用，仍可自由飞行与探索。';
     if (this.near(this.target)) return q.carrying ? '已到屋顶露台，按 E 与老林交谈并交付春茶。' : '按 E 与阿岚交谈，确认接下第一单。';
     if (!q.progress.map) return '新手引导 · 按 M 查看地图，金色标记就是当前目标。';
-    if (L.landed) return '落地后 WASD 步行，鼠标环顾；按空格骑上扫帚，向金色目标飞去。';
+    if (L.landed) return '落地后 WASD 步行，鼠标环顾；按 G 坐上魔毯，向金色目标飞去。';
     if (L.busy) return '正在安全降落，请稍候。落稳后走近居民，按 E 交谈。';
     if (!q.progress.move) return '飞行练习 · A / D 转向，W 俯冲、S 爬升，按住空格减速。';
     return q.carrying

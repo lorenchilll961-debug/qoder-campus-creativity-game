@@ -19,7 +19,7 @@ const FLARE_RATE = 1.5;    // rad/s: how hard the automatic pull-out likes to tu
 // A building top we are above - or no more than STEP below - is a floor like any other: the
 // cushion lifts us onto it. Anything that stands taller than that beside us is a wall.
 const STEP = 0.6;
-const BODY = 0.7;          // how close the broom's centre may come to a wall (m)
+const BODY = 1.0;          // carpet half-width plus clearance from walls (m)
 const NONE = -1e8;         // solid.heightAt answers -1e9 where nothing is built
 // twelve directions round the compass, for feeling out which way a wall faces
 const RING = (() => { const a = []; for (let i = 0; i < 12; i++) a.push(Math.sin((i * Math.PI) / 6), -Math.cos((i * Math.PI) / 6)); return a; })();
@@ -449,7 +449,7 @@ export class Flight {
     // buildings: the same again
     if (this.solid) this._solidWalls(dt, hs, hx, hz);
     // stones, trees and the lighthouse: slide around them
-    if (this.props && this.props.collide(this.pos, 0.9, this._n)) {
+    if (this.props && this.props.collide(this.pos, 1.2, this._n)) {
       const n = this._n, d = this.fwd.x * n.x + this.fwd.z * n.z;
       if (d < 0) {
         const rx = this.fwd.x - 1.5 * d * n.x, rz = this.fwd.z - 1.5 * d * n.z;

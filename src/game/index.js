@@ -57,27 +57,13 @@ export class Gameplay {
     game.kickflip = () => this.trick.start(true);
     game.padsNear = () => this.padsNear();
     this._bind();
-    this._loadStand();
+    this.standReady = game.rider.loadStand();
   }
 
   async attachUi() {
     await this.courier.attachUi();
     this.map = new WorldMap(this.game, this.courier);
     document.getElementById('openWorldMap').addEventListener('click', () => this.map.open());
-  }
-
-  /** The standing rider, if the file is there (she sets the broom down and stays on it otherwise). */
-  async _loadStand() {
-    const base = './assets/models', name = this.params.get('stand') || 'rider_stand';
-    try {
-      // asking for a file that is not there writes an error to the console: where the server
-      // lists its folders (the dev server does), look before asking
-      if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-        const list = await fetch(`${base}/`).then((r) => (r.ok ? r.text() : '')).catch(() => '');
-        if (list && !list.includes(`${name}.glb`)) return;
-      }
-      await this.game.rider.loadStand(base, name);
-    } catch { /* no standing model */ }
   }
 
   /** game.town has changed: its buildings become solid, its pads come alive. */
@@ -133,12 +119,12 @@ export class Gameplay {
     const L = this.landing;
     let html = null;
     if (play) {
-      if (L.state === 'landed') html = L.stand ? '<kbd>WASD</kbd> 步行 · <kbd>Shift</kbd> 快走 · 鼠标环顾 · <kbd>Space</kbd> 原地起飞' : '<kbd>Space</kbd> 起飞 · 站立模型未加载，暂不可步行';
+      if (L.state === 'landed') html = L.stand ? '<kbd>WASD</kbd> 步行 · <kbd>Shift</kbd> 奔跑 · 鼠标环顾 · <kbd>Space</kbd> 跳跃 · <kbd>G</kbd> 起飞' : '<kbd>G</kbd> 起飞 · 站立模型未加载，暂不可步行';
       else if (L.state === 'approach' || L.state === 'settle') html = `正在降落 <em>${esc(L.pad.name)}</em><small><kbd>Shift</kbd> 拉起放弃</small>`;
       else if (L.state === 'fly' && this.zone) html = `<kbd>Space</kbd><span class="x2">×2</span> 降落<em>${esc(this.zone.name)}</em> · <kbd>G</kbd> 脚下落地`;
       else if (L.state === 'fly') html = '<kbd>G</kbd> 脚下落地 · 或双击 <kbd>Space</kbd>';
     }
-    if (play && L.landed && this.courier.nearby()) html = `按 <kbd>E</kbd> 交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>Space</kbd> 起飞`;
+    if (play && L.landed && this.courier.nearby()) html = `按 <kbd>E</kbd> 交谈${L.stand ? ' · <kbd>WASD</kbd> 步行' : ''} · <kbd>G</kbd> 起飞`;
     this.hud.prompt(html);
   }
 
@@ -163,7 +149,8 @@ export class Gameplay {
     if (this.hush > 0) this.hush -= dt;
     this.zone = play || this.debug ? this._zone() : null;
     if (play) {
-      if (L.landed && (tapSpace || tapLand)) L.takeoff();
+      if (L.landed && tapGround) L.takeoff();
+      else if (L.landed && tapSpace) { if (L.stand) L.jump(); else L.takeoff(); }
       else if (L.state === 'fly' && tapGround) L.beginGround();
       else if (L.state === 'fly' && tapLand) {
         if (this.zone) L.begin(this.zone); else L.beginGround();

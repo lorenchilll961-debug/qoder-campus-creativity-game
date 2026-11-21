@@ -140,7 +140,7 @@ async function boot() {
   world.add(places.group);
   pipeline.overlay.add(places.overlay);
 
-  setLoad(0.9, '正在唤醒扫帚……');
+  setLoad(0.9, '正在唤醒魔毯……');
   const rider = (game.rider = await riderLoad);
   pipeline.overlay.add(rider.group, rider.lights);
   pipeline.overlay.environment = sky.bakeEnvironment(renderer);
@@ -172,7 +172,7 @@ async function boot() {
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
-  await game.gameplay.attachUi();
+  await Promise.all([game.gameplay.standReady, game.gameplay.attachUi()]);
   game.weather = new SeasonWeather(game);
 
   resize();
@@ -300,10 +300,9 @@ function advance(dt, ctl) {
     game.fov = r[5] || 60;
   }
   fx.update(dt, t, flight, camera, rider.sunVis, pipeline.size, pipeline.reversed);
-  // trails off the two edges of the bristle head
   rider.group.updateMatrixWorld(true);
-  _bl.set(-0.17, -0.02, 1.16).applyMatrix4(rider.group.matrixWorld);
-  _br.set(0.17, -0.02, 1.16).applyMatrix4(rider.group.matrixWorld);
+  _bl.set(-0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
+  _br.set(0.67, 0, 1.14).applyMatrix4(rider.model.matrixWorld);
   const trail = THREE.MathUtils.clamp((flight.speed - 34) / 26, 0, 1) * 0.42 + flight.boosting * 0.5;
   fx.updateRibbons(dt, _bl, _br, camera.position, trail);
   game.river.update(dt, fx.sprites, camera.position, fx.sunTint(rider.sunVis));

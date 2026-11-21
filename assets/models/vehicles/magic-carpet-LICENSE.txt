@@ -1,0 +1,15 @@
+Magic Carpet — Anna M
+
+作品来源：https://poly.pizza/m/b5etBd2ELng
+作者页面：https://poly.pizza/u/Anna%20M
+许可：Creative Commons Attribution 3.0 Unported（CC BY 3.0）
+许可全文：https://creativecommons.org/licenses/by/3.0/legalcode
+许可摘要：https://creativecommons.org/licenses/by/3.0/
+原始 GLB：https://static.poly.pizza/49338f41-6dd2-40ed-b2d9-74728791d589.glb
+获取日期：2026-11-21
+
+署名：Magic Carpet by Anna M, via Poly Pizza, licensed under CC BY 3.0.
+
+原始 GLB 文件保持原样；游戏运行时调整尺寸、居中、座位区域和边缘波动。
+原作采用模型内嵌材质颜色，没有外部纹理依赖。
+使用本素材应保留作品、作者、来源和许可链接，并注明所作修改；不得暗示作者为本游戏背书。
