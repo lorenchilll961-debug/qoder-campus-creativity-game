@@ -121,8 +121,7 @@ uniform vec3 uSeasonLeaves;
 uniform float uSeasonBloom;
 uniform float uSeasonSnow;
 float seasonSnowAt(vec3 p, float up){
-  return uSeasonSnow * smoothstep(0.35, 0.8, up) * smoothstep(1.8, 5.0, p.y)
-    * (0.72 + 0.28 * vnoise(p.xz * 0.045));
+  return uSeasonSnow * smoothstep(0.35, 0.72, up) * smoothstep(0.3, 1.8, p.y);
 }
 `;
 

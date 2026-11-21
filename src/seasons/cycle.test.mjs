@@ -6,7 +6,7 @@ const EXPECTED = [
   { id: 'spring', name: '春', grass: [1.55, 1.8, 0.82], leaves: [1.5, 1.7, 0.78], bloom: 1, snow: 0, pastel: 1 },
   { id: 'summer', name: '夏', grass: [1, 1, 1], leaves: [1, 1, 1], bloom: 1, snow: 0, pastel: 0 },
   { id: 'autumn', name: '秋', grass: [2.3, 0.82, 0.48], leaves: [2.6, 0.72, 0.32], bloom: 0.18, snow: 0, pastel: 0 },
-  { id: 'winter', name: '冬', grass: [0.82, 0.85, 0.96], leaves: [0.82, 0.87, 1.02], bloom: 0, snow: 0.84, pastel: 0 },
+  { id: 'winter', name: '冬', grass: [0.82, 0.85, 0.96], leaves: [0.82, 0.87, 1.02], bloom: 0, snow: 1, pastel: 0 },
 ];
 
 function stateOf({ grass, leaves, bloom, snow, pastel }) {
@@ -261,6 +261,26 @@ test('不同帧率相同时长一致，四秒精确到达终点', () => {
         assert.deepEqual(cycle.state, stateOf(EXPECTED[3]));
       }
     }
+  }
+});
+
+test('冬季积雪达到全覆盖，离开冬季后雪量归零', () => {
+  const cycle = new SeasonCycle();
+  cycle.select('winter');
+  cycle.update(2);
+  assert.equal(cycle.state.snow, 0.5);
+  cycle.update(2);
+  assert.equal(cycle.state.snow, 1);
+  assert.equal(cycle.state.bloom, 0);
+  assert.match(SEASONS[3].description, /飞雪.*白雪/);
+  for (const season of ['spring', 'summer', 'autumn']) {
+    cycle.select('winter');
+    cycle.update(4);
+    cycle.select(season);
+    cycle.update(2);
+    assert.equal(cycle.state.snow, 0.5);
+    cycle.update(2);
+    assert.equal(cycle.state.snow, 0);
   }
 });
 

@@ -34,11 +34,11 @@ export const SEASONS = Object.freeze([
   {
     id: 'winter',
     name: '冬',
-    description: '草叶冷淡，白雪覆地。',
+    description: '漫天飞雪，草甸尽覆白雪。',
     grass: [0.82, 0.85, 0.96],
     leaves: [0.82, 0.87, 1.02],
     bloom: 0,
-    snow: 0.84,
+    snow: 1,
     pastel: 0,
   },
 ].map((season) => Object.freeze({

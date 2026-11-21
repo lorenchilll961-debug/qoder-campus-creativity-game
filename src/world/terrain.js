@@ -532,6 +532,8 @@ void main(){
   tintAmt *= 1.0 - town.a;
   vec3 fcol = texture(uTintTex, uv).rgb;
   meadow = mix(meadow, fcol, saturate(tintAmt));
+  vec3 snowColor = vec3(0.94, 0.97, 1.0) * (0.94 + 0.06 * nzB.r);
+  meadow = mix(meadow, snowColor, uSeasonSnow);
   Mat m; m.c = meadow; m.h = mg.h; m.n = mg.n * 0.6 * nearK; m.r = 0.92;
 
   // ---- scree on the high slopes
@@ -663,7 +665,9 @@ void main(){
   }
 
   float snow = seasonSnowAt(P, N.y) * (1.0 - town.a);
-  m.c = mix(m.c, vec3(0.72, 0.79, 0.84) * (0.82 + 0.18 * mg.h), snow);
+  m.c = mix(m.c, snowColor, snow);
+  Nw = normalize(mix(Nw, N, snow * 0.85));
+  m.r = mix(m.r, 0.95, snow);
 
   // ---- light
   float cs = cloudShadow(P.xz, uTime);
