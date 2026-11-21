@@ -4,7 +4,7 @@
 // petals on the breeze and speed streaks in the air.
 import * as THREE from 'three';
 import { U, World } from '../core/ctx.js';
-import { Flakes, Sprites, Ribbon, KIND, SPR } from './particles.js';
+import { Flakes, Sprites, Snowfall, Ribbon, KIND, SPR } from './particles.js';
 import { VORTEX } from './vortex.js';
 import { stripWidth } from './strip.js';
 import { waveHeight } from '../world/water.js';
@@ -33,9 +33,10 @@ export class WindFX {
     this.noise = noise;
     this.flakes = new Flakes(12000);
     this.sprites = new Sprites(depthUniform, 7000);
+    this.snow = new Snowfall(depthUniform);
     this.ribbons = [new Ribbon(44, 0.7), new Ribbon(44, 0.7)];
     this.group = new THREE.Group();
-    this.group.add(this.flakes.mesh, this.sprites.mesh, this.ribbons[0].mesh, this.ribbons[1].mesh);
+    this.group.add(this.flakes.mesh, this.sprites.mesh, this.snow.mesh, this.ribbons[0].mesh, this.ribbons[1].mesh);
     this.acc = new Float32Array(32);
     this.time = 0;
     this._sp = [0, 0, 0, 0];
@@ -125,6 +126,10 @@ export class WindFX {
     const g = straw ? [0.52, 0.47, 0.20] : [0.20, 0.36, 0.08];
     const tint = U.uSeasonGrass.value;
     g[0] *= tint.x; g[1] *= tint.y; g[2] *= tint.z;
+    const snow = U.uSeasonSnow.value;
+    g[0] += (0.94 - g[0]) * snow;
+    g[1] += (0.97 - g[1]) * snow;
+    g[2] += (1.0 - g[2]) * snow;
     const v = rand(0.75, 1.25);
     this.flakes.spawn(x, y, z, vx, vy, vz, KIND.LEAF, rand(0.09, 0.2), g[0] * v, g[1] * v, g[2] * v, rand(2.2, 4.5), lit, rand(0.16, 0.34));
   }
@@ -422,6 +427,7 @@ export class WindFX {
     this.sprites.camVel.copy(cv);
     this._prevCam.copy(camera.position);
     this.sprites.update(dt, t, env, camera, res, reversed);
+    this.snow.update(camera, res, reversed);
   }
 
   _puff(x, y, z, vx, vy, vz, sun, sand) {

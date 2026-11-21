@@ -4,7 +4,7 @@
 //   Ribbon  - the trails the bristles draw in the air
 import * as THREE from 'three';
 import { U, shared } from '../core/ctx.js';
-import { NOISE, ATMOSPHERE } from '../shaders/common.js';
+import { NOISE, ATMOSPHERE, TERRAIN_LOOKUP } from '../shaders/common.js';
 import { SKY_UNIFORMS } from '../world/sky.js';
 
 export const KIND = { PETAL: 0, LEAF: 1, PEBBLE: 2 };
@@ -480,6 +480,79 @@ export class Sprites {
     const u = this.material.uniforms;
     u.uDepth.value.set(camera.near, camera.far, reversed ? 1 : 0);
     u.uRes.value.copy(size);
+  }
+}
+
+export class Snowfall {
+  constructor(depthUniform) {
+    const positions = new Float32Array(2600 * 3);
+    for (let i = 0; i < positions.length; i++) positions[i] = Math.random();
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        ...shared('uTime', 'uSeasonSnow', 'uWind', 'uHeightTex', 'uWorld'),
+        tDepth: depthUniform,
+        uDepth: { value: new THREE.Vector3() },
+        uRes: { value: new THREE.Vector2() },
+      },
+      vertexShader: /* glsl */`
+        uniform float uTime;
+        uniform vec4 uWind;
+        uniform vec2 uRes;
+        varying float vFade;
+        varying float vViewZ;
+        ${TERRAIN_LOOKUP}
+        void main(){
+          vec3 extent = vec3(80.0, 48.0, 80.0);
+          float phase = position.z * 6.2831853;
+          vec3 drift = vec3(uWind.x * uTime * 1.4, -uTime * (1.5 + position.y * 1.8), uWind.y * uTime * 1.4);
+          drift.x += sin(uTime * 0.8 + phase) * 0.65;
+          drift.z += cos(uTime * 0.6 + phase) * 0.65;
+          // World-anchored wrapping keeps the snow field populated during fast flight.
+          vec3 offset = mod(position * extent + drift - cameraPosition + extent * 0.5, extent) - extent * 0.5;
+          vec3 P = cameraPosition + offset;
+          vec4 mv = viewMatrix * vec4(P, 1.0);
+          vec3 edge = abs(offset) / (extent * 0.5);
+          vFade = 1.0 - smoothstep(0.65, 1.0, max(edge.x, max(edge.y, edge.z)));
+          vFade *= smoothstep(0.8, 2.5, -mv.z) * step(max(terrainH(P.xz), 0.0) + 0.08, P.y);
+          vViewZ = -mv.z;
+          gl_PointSize = clamp((0.10 + 0.14 * position.x) * uRes.y * projectionMatrix[1][1] / max(-mv.z, 0.1), 1.0, 10.0);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform sampler2D tDepth;
+        uniform vec3 uDepth;
+        uniform vec2 uRes;
+        uniform float uSeasonSnow;
+        varying float vFade;
+        varying float vViewZ;
+        void main(){
+          vec2 uv = gl_PointCoord * 2.0 - 1.0;
+          float shape = 1.0 - smoothstep(0.10, 1.0, dot(uv, uv));
+          float d = texture(tDepth, gl_FragCoord.xy / uRes).r;
+          float scene = uDepth.z > 0.5 ? uDepth.x * uDepth.y / (uDepth.x + d * (uDepth.y - uDepth.x))
+                                       : uDepth.x * uDepth.y / (uDepth.y - d * (uDepth.y - uDepth.x));
+          float alpha = shape * vFade * uSeasonSnow * clamp((scene - vViewZ) / 0.3, 0.0, 1.0);
+          if (alpha < 0.003) discard;
+          gl_FragColor = vec4(2.2, 2.3, 2.4, alpha * 0.9);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.mesh = new THREE.Points(geometry, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 41;
+    this.mesh.visible = false;
+  }
+
+  update(camera, size, reversed) {
+    this.mesh.visible = U.uSeasonSnow.value > 0;
+    if (!this.mesh.visible) return;
+    this.material.uniforms.uDepth.value.set(camera.near, camera.far, reversed ? 1 : 0);
+    this.material.uniforms.uRes.value.copy(size);
   }
 }
 

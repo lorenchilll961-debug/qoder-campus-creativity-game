@@ -147,7 +147,7 @@ void main(){
   float cover = splat.a;
   // ragged edges: blades thin out before the sward ends
   float keep = step(rnd.z, cover * 1.25) * smoothstep(0.02, 0.5, cover);
-  float fade = lodFade(d) * keep;
+  float fade = lodFade(d) * keep * (1.0 - uSeasonSnow);
   // nothing to draw here (bare ground, or outside this shell): skip the wind and wake lookups
   if (fade <= 0.0){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
@@ -200,7 +200,6 @@ void main(){
   vInfo = vec4(t, rnd.w, gust, light.r);
   // on cliff ledges the sward is short, wind-burnt and darker (matches the far-field ground)
   vTint = mix(meadowTint(xz, wet), vec3(0.135, 0.170, 0.060) * uSeasonGrass, smoothstep(0.25, 0.8, light.a) * 0.62) * mix(0.88, 1.14, cl.w);
-  vTint = mix(vTint, vec3(0.45, 0.51, 0.57), seasonSnowAt(root, 1.0) * smoothstep(0.0, 0.8, t));
   vAux = vec2(light.g, min(wk.z, 1.0));
   gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
 }
@@ -210,6 +209,7 @@ const GRASS_FRAG = /* glsl */`
 precision highp float;
 uniform float uTime;
 uniform float uRoot;
+uniform float uSeasonSnow;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec4 vInfo;
@@ -232,12 +232,13 @@ void main(){
   vec3 alb = mix(rootC, tipC, pow(t, 1.25)) * mix(0.84, 1.16, vInfo.y);
   alb = mix(alb, vec3(0.50, 0.46, 0.20), smoothstep(0.80, 1.0, t) * 0.30 * vInfo.y);   // seed-head straw
 
+  alb = mix(alb, vec3(0.94, 0.97, 1.0), uSeasonSnow);
   float sh = vInfo.w * cloudShadow(vWorld.xz, uTime) * riderShadow(vWorld);
   float ndl = dot(N, uSunDir);
   float dif = saturate(ndl * 0.55 + 0.45);
   // light pouring through the blades when you look toward the sun
   float back = pow(saturate(dot(V, -uSunDir) * 0.5 + 0.5), 4.0);
-  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t);
+  vec3 trans = vTint * vec3(2.3, 2.5, 0.75) * back * (0.25 + 0.75 * t) * (1.0 - uSeasonSnow);
   float ao = mix(mix(0.85, 0.24, uRoot), 1.0, smoothstep(0.0, 0.75, t)) * vAux.x;
   vec3 col = alb * (uSunColor * dif * sh * mix(mix(0.95, 0.55, uRoot), 1.0, t)) + trans * uSunColor * sh * 0.33;
   col += alb * mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * ao;

@@ -28,6 +28,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { U, shared } from '../core/ctx.js';
 import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
+import { winterTreeMesh } from './props.js';
 import { KIND, SPR } from '../fx/particles.js';
 import { Journal } from '../ui/journal.js';
 
@@ -224,6 +225,7 @@ export class Places {
     if (hasWind) defines.HAS_WIND = '';
     if (kind === 'flora') defines.FLORA = '';
     if (kind === 'gem') defines.GEM = '';
+    if (info.name === 'blossom_tree' || info.name === 'east_pine') defines.SEASONAL_TREE = '';
     // (generated meshes are flagged double-sided but are closed solids: like the props, draw their fronts only)
     const thin = info.thin ?? (kind === 'flora');
     if (thin) defines.THIN = '';
@@ -234,7 +236,7 @@ export class Places {
     const base = sm.color && !g.attributes.aColor ? sm.color : { r: 1, g: 1, b: 1 };
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        ...shared(...SHARED),
+        ...shared(...SHARED, 'uSeasonSnow'),
         tMap: { value: sm.map || null }, tNormal: { value: sm.normalMap || null }, tRough: { value: sm.roughnessMap || null },
         uBase: { value: new THREE.Vector3(base.r, base.g, base.b) },
         uFoliage: { value: info.foliage ?? (hasWind ? 1 : 0) },
@@ -285,6 +287,15 @@ export class Places {
         keepout.push([it.pos[0], it.pos[2], (info.baseRadius ?? Math.min(info.radius, 1.5)) * su * 0.9]);
         return new THREE.Matrix4().compose(p.set(it.pos[0], y, it.pos[2]), q, sc.set(s[0], s[1], s[2]));
       });
+      if (info.name === 'blossom_tree' || info.name === 'east_pine') {
+        const winter = winterTreeMesh(info, mats.length);
+        mats.forEach((m, i) => winter.setMatrixAt(i, m));
+        winter.instanceMatrix.needsUpdate = true;
+        winter.computeBoundingSphere();
+        winter.boundingSphere.radius += 2.5;
+        group.add(winter);
+        pl.meshes.push({ mesh: winter, far: THREE.MathUtils.clamp(info.size * maxS * 130, 300, 2600) });
+      }
       for (const prim of prims) {
         const mat = this._material(prim, info, 'item');
         mat.uniforms.uSelf.value = info.radius * maxS * 1.3 + 1.5;
@@ -738,6 +749,7 @@ void main(){
 const FRAG = /* glsl */`
 precision highp float;
 uniform float uTime;
+uniform float uSeasonSnow;
 #ifdef HAS_MAP
 uniform sampler2D tMap;
 #endif
@@ -765,6 +777,9 @@ ${CLOUD_SHADOW}
 ${TERRAIN_LOOKUP}
 ${SHADOW}
 void main(){
+  #ifdef SEASONAL_TREE
+    if (uSeasonSnow > hash12(floor(gl_FragCoord.xy))) discard;
+  #endif
   vec3 alb = vColor.rgb * uBase;
   #ifdef HAS_MAP
     alb *= texture(tMap, vUv).rgb;
