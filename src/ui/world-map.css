@@ -74,8 +74,11 @@
 .world-map .wm-nav-actions { flex-shrink: 0; }
 .world-map .wm-layout { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 22px; }
 .world-map .wm-chart { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(180px, 1fr) auto auto; gap: 10px; }
-.world-map .wm-filters { display: flex; flex-wrap: wrap; gap: 6px; }
-.world-map .wm-filters button { min-height: 36px; font-size: 12px; padding: 6px 12px; background: transparent; color: var(--wm-muted); }
+.world-map .wm-chart-controls, .world-map .wm-palace-actions, .world-map .wm-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.world-map .wm-palace-actions button, .world-map .wm-filters button { min-height: 36px; font-size: 12px; padding: 6px 12px; background: transparent; color: var(--wm-muted); }
+.world-map .wm-palace-actions button { border-color: var(--wm-amber); color: var(--wm-amber); }
+.world-map .wm-palace-actions [data-action="palace"] { background: var(--wm-raised); font-weight: 650; }
+.world-map .wm-palace-status { flex-basis: 100%; color: var(--wm-amber); }
 .world-map .wm-filters button[aria-pressed="true"] { color: var(--wm-teal); background: var(--wm-panel); }
 .world-map .wm-surface { position: relative; min-width: 0; min-height: 180px; overflow: hidden; border: 1px solid var(--wm-line); border-radius: 5px; background: #1a3f48; }
 .world-map canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; touch-action: none; cursor: grab; }

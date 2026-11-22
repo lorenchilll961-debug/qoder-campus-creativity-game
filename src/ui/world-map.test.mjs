@@ -171,6 +171,43 @@ test('open renders current coordinates and exact roof height before notifying co
   assert.match(map.dialog.querySelector('.wm-order').textContent, /订单已完成/);
   map.close(); game.paused = true; assert.equal(map.open(), false);
 });
+test('palace stays labeled and clickable with exploration landmarks switched off', t => {
+  const { map, game, atlas } = setup(t);
+  const landmark = { id: 'place:palace', name: '故宫 · 午门广场', kind: 'place',
+    pos: { x: 175, y: 145, z: -423.2 }, hidden: false };
+  const bounds = { min: { x: -110, z: -980 }, max: { x: 460, z: -420 } };
+  game.palace = { landmark, collision: { bounds, contains: x => x === landmark.pos.x } };
+  atlas.landmarks.push(landmark);
+  atlas.setFilter('place', false);
+  map.open();
+  const click = action => map.dialog.fire('click', { target: { closest: () => ({ dataset: { action } }) } });
+  const palaceButton = map.dialog.querySelector('[data-action="palace"]');
+  assert.equal(palaceButton.disabled, false);
+  assert.equal(palaceButton.textContent, '飞往故宫');
+  assert.ok(map.canvas.calls.some(([method, label]) => method === 'fillText' && label === '故宫 · 秋英坡'));
+  assert.equal(map.hitTest(mapPoint(landmark.pos, map.view, w, h)), landmark);
+  click('palace-focus');
+  assert.equal(map.selected(), landmark);
+  assert.ok(map.view.span < WORLD / 4);
+  assert.equal(map.view.z, (bounds.min.z + bounds.max.z) / 2);
+
+  game.switchPalace = () => { game.flight.pos = landmark.pos; return true; };
+  click('palace');
+  assert.equal(map.isOpen, false);
+  map.open();
+  assert.equal(palaceButton.textContent, '返回海岛航线');
+});
+
+test('an unavailable palace has a visible explanation in the map controls', t => {
+  const { map } = setup(t);
+  map.open();
+  const status = map.dialog.querySelector('.wm-palace-status');
+  assert.equal(status.hidden, false);
+  assert.match(status.textContent, /故宫场景加载失败/);
+  assert.equal(map.dialog.querySelector('[data-action="palace-focus"]').disabled, true);
+  assert.equal(map.dialog.querySelector('[data-action="palace"]').disabled, true);
+});
+
 test('thumbnail samples actual world coordinates once; closed renders/resizes do no work', (t) => {
   const { map, samples, edges } = setup(t);
   assert.equal(samples(), 0); map.render(); assert.equal(samples(), 0);

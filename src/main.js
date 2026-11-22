@@ -31,6 +31,7 @@ import { SaveService } from './core/save.js';
 import { WorldState } from './core/world-state.js';
 import { WorldControls } from './ui/world-controls.js';
 import { AtlasState, worldLandmarks } from './core/atlas-state.js';
+import { createIslandDragon } from './dragon/index.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -158,10 +159,11 @@ async function boot() {
   world.add(town.group);
   town.bakeShadows();
   try {
-    const palace = (game.palace = (await palaceModule)?.createPalace(terrain));
+    const palace = (game.palace = (await palaceModule)?.createPalace(terrain, water.material.uniforms.uRipple.value));
     if (palace) {
       world.add(palace.group, palace.sun, palace.fill);
       game.switchPalace = switchPalace;
+      palace.loadVendors?.().catch(error => console.warn('市集摊主加载失败', error));
     }
   } catch (error) {
     console.warn('故宫场景无法生成', error);
@@ -175,6 +177,7 @@ async function boot() {
   const rider = (game.rider = await riderLoad);
   pipeline.overlay.add(rider.group, rider.lights);
   pipeline.overlay.environment = sky.bakeEnvironment(renderer);
+  game.palace?.setEnvironment(pipeline.overlay.environment);
   const vortex = (game.vortex = new VortexWake(terrain));
   vortex.river = river;
   game.wake = new Wake(renderer, vortex);
@@ -202,6 +205,7 @@ async function boot() {
   game.chase = new ChaseCamera(camera, flight);
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
+  game.dragon = createIslandDragon(game);
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
   game.atlas = new AtlasState(game.save, terrain, worldLandmarks(game));
   for (const place of places.list) place.visited = game.atlas.discovered.has(`place:${place.id}`);
@@ -219,7 +223,13 @@ async function boot() {
   $('start').hidden = false;
   $('keys').hidden = false;
   $('start').addEventListener('click', start);
-  if (params.has('debug')) $('title').classList.add('gone');
+  if (params.has('debug') || params.has('dragon')) $('title').classList.add('gone');
+  if (params.has('dragon') && game.dragon) {
+    game.freeCam = true;
+    game.fov = 48;
+    game.rider.group.visible = false;
+    $('hud').hidden = true;
+  }
   if (params.has('play')) start();
   requestAnimationFrame(frame);
 }
@@ -318,6 +328,8 @@ function advance(dt, ctl) {
   if (game.paused) return;
   flight.update(dt, ctl, t);
   rider.update(dt, t, flight, terrain);
+  game.dragon?.update(dt);
+  if (params.has('dragon')) game.dragon?.show(camera);
   if (flight.touchdown > 0) fx.slam(flight, flight.touchdown, rider.sunVis);
   // the wake: step the vortex simulation, then let it blow over the ground field
   vortex.update(dt, flight, t, fx.env.wind);
@@ -396,7 +408,7 @@ function render(dt) {
   if (!pipeline.sceneRT) { resize(); if (!pipeline.sceneRT) return; }
   camera.updateMatrixWorld();
   U.uCamPos.value.copy(camera.position);
-  game.rider.group.visible = !(game.chase.fpvK > 0.55 && game.state === 'play' && !game.gameplay.landing.busy && !game.freeCam);
+  game.rider.group.visible = !params.has('dragon') && !(game.chase.fpvK > 0.55 && game.state === 'play' && !game.gameplay.landing.busy && !game.freeCam);
   game.weather.prepare(camera, pipeline.size, pipeline.reversed);
   game.rider.renderShadow(pipeline.reversed);
   game.water.renderReflection(camera, pipeline.size);
@@ -412,6 +424,7 @@ function render(dt) {
     sun.intensity = 1.1;
     fill.color.setRGB(sky.x, sky.y, sky.z);
     fill.intensity = 2.5;
+    game.palace.update(dt, camera);
   }
   game.water.update(camera);
   renderer.info.reset();

@@ -4,6 +4,7 @@ import { U, World, shared } from '../core/ctx.js';
 import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, MEADOW, SHADOW, STRIP, TOWN_SHADOW, TOWN_MASK } from '../shaders/common.js';
 import { Load } from '../core/progress.js';
 import { SKY_UNIFORMS } from './sky.js';
+import { applyPalaceGrade, palacePavingAt } from './palace-site.js';
 
 // CDLOD. For seams to stay closed, level L may only begin morphing beyond the farthest point any
 // level L-1 node can reach: RANGE + LEAF * 2 * sqrt(2) <= 2 * MORPH0 * RANGE. With these numbers
@@ -137,6 +138,7 @@ export class Terrain {
     const h = (this.h = new Float32Array(N * N));
     const s = (meta.hMax - meta.hMin) / 65535;
     for (let i = 0; i < h.length; i++) h[i] = meta.hMin + q[i] * s;
+    applyPalaceGrade(meta, h);
     const ht = new THREE.DataTexture(h, N, N, THREE.RedFormat, THREE.FloatType);
     ht.internalFormat = 'R32F';
     ht.wrapS = ht.wrapT = THREE.ClampToEdgeWrapping;
@@ -146,10 +148,25 @@ export class Terrain {
     ht.needsUpdate = true;
     this.heightTex = ht;
 
-    this.splatTex = dataTex(splatImg);
     this.lightTex = dataTex(lightImg);
     this.splatN = splatImg.width;
     this.splat = pixels(splatImg);
+    const groundCover = new Uint8Array(this.splat);
+    const cell = meta.world / this.splatN;
+    for (let z = 0; z < this.splatN; z++) {
+      const wz = (z + .5) * cell - World.half;
+      if (wz < -1080 || wz > -395) continue;
+      for (let x = 0; x < this.splatN; x++) {
+        if (!palacePavingAt((x + .5) * cell - World.half, wz)) continue;
+        const i = (z * this.splatN + x) * 4;
+        groundCover[i] = groundCover[i + 3] = 0;
+      }
+    }
+    this.splatTex = new THREE.DataTexture(groundCover, this.splatN, this.splatN);
+    this.splatTex.minFilter = THREE.LinearMipmapLinearFilter;
+    this.splatTex.magFilter = THREE.LinearFilter;
+    this.splatTex.generateMipmaps = true;
+    this.splatTex.needsUpdate = true;
 
     this.tintTex = dataTex(tintImg, { srgb: true });
     U.uHeightTex.value = ht;

@@ -2,13 +2,21 @@
 """Static dev server with caching off, plus a local-only endpoint the game's debug hook uses to
 save full-resolution frame captures into .shots/ (POST /__save/<name>).
 
-    python3 tools/serve.py [port] [host]        default: port 6280 on 127.0.0.1 (this machine only)
+    python3 tools/serve.py [port] [host] [--open]
+
+By default, listen on port 6280 on 127.0.0.1. Pass port 0 to use any available port.
 
 Pass 0.0.0.0 as the host to reach it from other devices on your network. Hidden files and folders
 (.git, .shots, ...) are never served, and captures are only accepted from a page this server itself
 served to a browser on this machine.
 """
-import functools, http.server, os, re, sys, urllib.parse
+import argparse
+import functools
+import http.server
+import os
+import re
+import urllib.parse
+import webbrowser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOTS = os.path.join(ROOT, ".shots")
@@ -65,7 +73,24 @@ class H(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-port = int(sys.argv[1]) if len(sys.argv) > 1 else 6280
-host = sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1"
-print(f"花信风: http://{'localhost' if host == '127.0.0.1' else host}:{port}/", flush=True)
-http.server.ThreadingHTTPServer((host, port), functools.partial(H, directory=ROOT)).serve_forever()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="启动花信风本地游戏服务器")
+    parser.add_argument("port", nargs="?", type=int, default=6280, help="端口，填 0 自动选择")
+    parser.add_argument("host", nargs="?", default="127.0.0.1")
+    parser.add_argument("--open", action="store_true", help="启动后打开低画质试玩入口")
+    args = parser.parse_args()
+    try:
+        server = http.server.ThreadingHTTPServer((args.host, args.port), functools.partial(H, directory=ROOT))
+    except OSError as error:
+        parser.exit(1, f"无法启动花信风服务器（{args.host}:{args.port}）：{error}\n")
+    with server:
+        port = server.server_address[1]
+        host = "localhost" if args.host in ("127.0.0.1", "0.0.0.0") else args.host
+        url = f"http://{host}:{port}/"
+        print(f"花信风: {url}", flush=True)
+        if args.open:
+            webbrowser.open_new_tab(url + "?q=low&dpr=1")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass

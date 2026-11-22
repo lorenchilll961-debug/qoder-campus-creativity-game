@@ -15,7 +15,7 @@ import { WUMEN_VERTICAL_PROFILE } from './special/WumenVerticalProfile.js';
  * - (p.x + 40, p.z − 14) 不阻挡（翼楼之间空地）
  * - 中轴 x=0, z ∈ [p.z − 18, p.z + 18] 可通行（中门洞贯通）
  */
-export function buildWumen(lib, data) {
+export function buildWumen(lib, data, buildBody = buildHallBody) {
   const { position: p, dimensions: d, features } = data;
   const group = new THREE.Group();
   group.name = 'wumen';
@@ -114,7 +114,7 @@ export function buildWumen(lib, data) {
   // 城楼（重檐庑殿，建在城台顶部中央）
   const profile = WUMEN_VERTICAL_PROFILE;
   const towerBase = profile.retained.floorY;
-  const hallBody = buildHallBody(lib, {
+  const hallBody = buildBody(lib, {
     width: d.width, depth: d.depth, height: profile.body.height, bays: 9, facade: 'lattice'
   });
   hallBody.position.y = towerBase;
@@ -155,14 +155,14 @@ export function buildWumen(lib, data) {
     const wing = new THREE.Group();
     wing.position.set(wingX, towerBase, (south + north) / 2);
     wing.rotation.y = Math.PI / 2;
-    const wingBody = buildHallBody(lib, { width: passage, depth: wingW, height: 6.5, bays: 13 });
+    const wingBody = buildBody(lib, { width: passage, depth: wingW, height: 6.5, bays: 13 });
     wing.add(wingBody, buildRoof(lib, { type: 'wudian', width: passage + 0.4, depth: wingW + 0.4,
       baseY: wingBody.userData.topY, brackets: true, detail: 'low' }));
     group.add(wing);
     for (const z of [south, north]) {
       const corner = new THREE.Group();
       corner.position.set(wingX, towerBase, z);
-      const cornerBody = buildHallBody(lib, { width: pavilion, depth: pavilion, height: 7.5, bays: 3 });
+      const cornerBody = buildBody(lib, { width: pavilion, depth: pavilion, height: 7.5, bays: 3 });
       corner.add(cornerBody, buildRoof(lib, { type: 'pavilion', width: pavilion + 0.4, depth: pavilion + 0.4,
         baseY: cornerBody.userData.topY, layers: 2, brackets: true, detail: 'high' }));
       group.add(corner);
