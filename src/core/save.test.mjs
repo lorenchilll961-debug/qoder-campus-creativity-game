@@ -7,6 +7,7 @@ const KEY = 'petalwake.save.v2';
 const legacyKey = (key) => `petalwake.${key}`;
 const envelope = (data) => JSON.stringify({ version: 2, data });
 const quest = (status = 'completed') => ({ version: 1, status, intro: true, move: true, map: true, fly: true, walk: false });
+const tea = () => ({ id: FIRST_ORDER.id, from: FIRST_ORDER.pickup, to: FIRST_ORDER.destination, parcel: FIRST_ORDER.parcel, reward: FIRST_ORDER.reward });
 const world = () => ({ version: 1, day: 8, hour: 13.5, running: true, season: 'spring', weather: 'clear' });
 
 class Storage {
@@ -91,15 +92,17 @@ test('旧 completed 仍只提供一份首单奖励，不增加历史配送数，
   for (let i = 0; i < 3; i++) {
     const save = new SaveService(storage);
     const order = new DeliveryQuest(save);
-    assert.equal(order.status, 'completed');
+    assert.equal(order.firstDone, true);
     assert.equal(order.coins, FIRST_ORDER.reward);
-    assert.equal(order.accept(FIRST_ORDER.pickup, true), false);
-    assert.equal(order.deliver(FIRST_ORDER.destination, true), false);
+    assert.equal(order.delivered, 1);
+    assert.deepEqual(order.orders, []);
+    assert.equal(order.accept(tea()), false);
+    assert.deepEqual(order.deliver(FIRST_ORDER.destination, true), []);
     order.learn('walk');
     assert.equal(save.get('deliveries.v1'), 4);
     assert.equal(save.get('coins', 0), 0);
   }
-  assert.equal(storage.writes.length, 2); // migration, then the first walk observation
+  assert.equal(storage.writes.length, 3); // envelope migration, delivery.v2 migration, then walk
 });
 
 test('合法 available/active 首单状态及 false/0 也迁移，不补发奖励', () => {
@@ -115,8 +118,82 @@ test('合法 available/active 首单状态及 false/0 也迁移，不补发奖�
     assert.equal(save.get('kickflip.v1', true), false);
     assert.equal(save.get('deliveries.v1', 10), 0);
     assert.deepEqual(save.get('treasures.v1'), []);
-    assert.equal(new DeliveryQuest(save).coins, 0);
+    const order = new DeliveryQuest(save);
+    assert.equal(order.coins, 0); assert.equal(order.delivered, 0); assert.equal(order.firstDone, false);
+    assert.deepEqual(order.orders, status === 'active' ? [tea()] : []);
+    assert.deepEqual(order.progress, { intro: true, move: true, map: true, fly: true, walk: false });
+    const restored = new DeliveryQuest(new SaveService(storage));
+    assert.deepEqual(restored.orders, order.orders);
+    assert.deepEqual(restored.progress, order.progress);
+    assert.equal(restored.coins, 0);
+    if (status === 'available') assert.equal(restored.accept(tea()), true);
+    assert.deepEqual(restored.deliver(FIRST_ORDER.destination, true), [tea()]);
+    assert.equal(restored.coins, 30); assert.equal(restored.delivered, 1);
+    const completed = new DeliveryQuest(new SaveService(storage));
+    assert.equal(completed.accept(tea()), false);
+    assert.deepEqual(completed.deliver(FIRST_ORDER.destination, true), []);
+    assert.equal(completed.coins, 30); assert.equal(completed.delivered, 1);
   }
+});
+
+test('delivery.v2 保存 128 个并行订单、报价序号与已结算 id，不改动其他系统', () => {
+  const storage = new Storage();
+  const save = new SaveService(storage);
+  save.set('deliveries.v1', 7);
+  save.set('world.v1', world());
+  const q = new DeliveryQuest(save), stations = ['guild', 'teahouse', 'customs', 'oldkeep'];
+  const orders = Array.from({ length: 128 }, (_, i) => {
+    const order = q.offer(stations[i % stations.length], stations, () => i % 2 ? 0.99 : 0);
+    assert.equal(q.accept(order), true);
+    return order;
+  });
+  const unused = q.offer('guild', stations, () => 0);
+  for (const key of ['intro', 'move', 'map', 'walk']) q.learn(key);
+  const restoredSave = new SaveService(storage), restored = new DeliveryQuest(restoredSave);
+  assert.deepEqual(restored.orders, orders);
+  assert.deepEqual(restored.progress, q.progress);
+  assert.equal(restored.offer('guild', stations, () => 0).id, 'errand-130');
+  assert.equal(unused.id, 'errand-129');
+  for (const station of stations) {
+    assert.deepEqual(restored.deliver(station, true), orders.filter((order) => order.to === station));
+  }
+  assert.equal(restored.delivered, 128);
+  assert.equal(restored.coins, orders.reduce((sum, order) => sum + order.reward, 0));
+  assert.equal(restored.progress.fly, false);
+  const finished = new DeliveryQuest(new SaveService(storage));
+  assert.equal(finished.carrying, false);
+  assert.equal(finished.coins, restored.coins); assert.equal(finished.delivered, 128);
+  for (const order of orders) assert.equal(finished.accept(order), false);
+  for (const station of stations) assert.deepEqual(finished.deliver(station, true), []);
+  assert.equal(finished.accept(unused), true);
+  assert.equal(finished.offer('guild', stations, () => 0).id, 'errand-131');
+  assert.equal(restoredSave.get('deliveries.v1'), 7);
+  assert.deepEqual(restoredSave.get('world.v1'), world());
+  assert.equal(contents(storage).data['delivery.v2'].version, 2);
+  assert.equal(contents(storage).data['delivery.v2'].sequence, '131');
+  assert.equal(storage.items.size, 1);
+  assert.ok(storage.writes.every((write) => write.key === KEY));
+});
+
+test('结算写入失败保留会话账本，flush 后恢复不重复奖励', () => {
+  const storage = new Storage(), save = new SaveService(storage), q = new DeliveryQuest(save);
+  const offer = q.offer('guild', ['guild', 'customs'], () => 0);
+  assert.equal(q.accept(offer), true);
+  storage.failWrite = true;
+  assert.deepEqual(q.deliver('customs', true), [offer]);
+  const attempts = storage.attempts;
+  assert.equal(save.status, 'memory');
+  assert.deepEqual(q.deliver('customs', true), []);
+  assert.equal(q.accept(offer), false);
+  assert.equal(storage.attempts, attempts);
+  assert.equal(contents(storage).data['delivery.v2'].orders.length, 1);
+  storage.failWrite = false;
+  assert.equal(save.flush(), true);
+  const restored = new DeliveryQuest(new SaveService(storage));
+  assert.equal(restored.coins, offer.reward); assert.equal(restored.delivered, 1);
+  assert.deepEqual(restored.orders, []);
+  assert.equal(restored.accept(offer), false);
+  assert.deepEqual(restored.deliver('customs', true), []);
 });
 
 test('legacy 只迁移合法部分，不把字符串/数字当作解锁或引导完成', () => {
@@ -132,7 +209,7 @@ test('legacy 只迁移合法部分，不把字符串/数字当作解锁或引导
   assert.equal(save.get('deliveries.v1', 0), 0);
   assert.deepEqual(save.get('treasures.v1'), ['west:1', 'east:2']);
   assert.equal(new DeliveryQuest(save).coins, 0);
-  assert.equal(new DeliveryQuest(save).deliver(FIRST_ORDER.destination, true), false);
+  assert.deepEqual(new DeliveryQuest(save).deliver(FIRST_ORDER.destination, true), []);
 });
 
 test('损坏 legacy 彼此隔离；不合法任务、计数或收藏不产生奖励', () => {

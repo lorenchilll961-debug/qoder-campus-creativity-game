@@ -80,6 +80,7 @@ export class Gameplay {
     // a pad with something built across every way in is left out of it all (see landing.way)
     this.landing.forget();
     this.open = this.pads.filter((p) => this.landing.way(p));
+    this.courier.setPads(this.pads);
 
     if (this.beacons) { g.pipeline.overlay.remove(this.beacons.group); this.beacons.dispose(); this.beacons = null; }
     if (this.open.length) {
@@ -89,7 +90,6 @@ export class Gameplay {
     }
     if (this.landing.busy && this.landing.pad?.kind !== 'ground' && !this.open.includes(this.landing.pad)) this.landing.abort();
     this.zone = null;
-    this.courier.setPads(this.open);
   }
 
   /** The landing zone: the nearest pad within reach (with a little stickiness, so two do not flicker). */
@@ -98,7 +98,9 @@ export class Gameplay {
     if (L.busy) return L.state === 'approach' || L.state === 'settle' ? L.pad : null;
     if (this.hush > 0) return null;
     const target = this.game.atlas ? this.navigationTarget : this.courier.target;
-    if (target && this.open.includes(target) && Math.hypot(target.pos.x - f.pos.x, target.pos.y - f.pos.y, target.pos.z - f.pos.z) < LAND.RANGE) return target;
+    if (target?.street && Math.hypot(target.pos.x - f.pos.x, target.pos.z - f.pos.z) < 12) return null;
+    const tp = target?.pad || target;
+    if (tp && this.open.includes(tp) && Math.hypot(tp.pos.x - f.pos.x, tp.pos.y - f.pos.y, tp.pos.z - f.pos.z) < LAND.RANGE) return tp;
     let best = null, bd = Infinity;
     for (const p of this.open) {
       const d = Math.hypot(p.pos.x - f.pos.x, p.pos.y - f.pos.y, p.pos.z - f.pos.z) - (p === this.zone ? 6 : 0);
@@ -178,7 +180,7 @@ export class Gameplay {
     const f = this.game.flight;
     return this.pads.map((p) => {
       const dist = Math.hypot(p.pos.x - f.pos.x, p.pos.y - f.pos.y, p.pos.z - f.pos.z);
-      return { id: p.id, name: p.name, town: p.town, dist: +dist.toFixed(1), open: this.open.includes(p), inRange: dist < LAND.RANGE, zone: p === this.zone, target: p === this.courier.target };
+      return { id: p.id, name: p.name, town: p.town, dist: +dist.toFixed(1), open: this.open.includes(p), inRange: dist < LAND.RANGE, zone: p === this.zone, target: p === (this.courier.target?.pad || this.courier.target) };
     }).sort((a, b) => a.dist - b.dist);
   }
 }

@@ -25,7 +25,7 @@
 import * as THREE from 'three';
 import { planApproach, APPROACH } from './approach.js';
 import { SPEEDS } from '../player/flight.js';
-import { WALK, JUMP, walkVector, probeGround, moveGround, moveJump, groundAnchor, groundFailure, airClear, bodyClear } from './ground.js';
+import { WALK, JUMP, walkVector, probeGround, moveGround, moveJump, moveAir, groundAnchor, groundFailure, airClear, bodyClear } from './ground.js';
 import { puff, dustRing, twinkle, PALE } from './sparks.js';
 
 const TAU = Math.PI * 2;
@@ -302,39 +302,25 @@ export class Landing {
   jump() {
     const w = this.walk;
     if (this.state !== 'landed' || !w || w.jump.on) return false;
-    if (!bodyClear(this._env(), w.pos.x, w.pos.y, w.pos.z, WALK.height + 0.08)) { this._fail('clearance'); return false; }
     w.jump = { y: w.pos.y, velocity: JUMP.speed, on: true };
     this.game.rider.airborne = true;
     return true;
   }
 
-  /** Get back on and go. */
+  /** Get back on and go — from wherever she stands, even mid-jump. */
   takeoff() {
     if (this.state !== 'landed') return false;
-    if (this.walk?.jump.on) { this._fail('airborne', '请先落地，再按 G 坐上魔毯'); return false; }
-    if (this.pad.kind === 'ground' || this.walk?.moved) {
-      const env = this._env(), pos = this.walk.pos;
-      const support = probeGround(env, pos.x, pos.z, { referenceY: pos.y });
-      if (!support.ok || Math.abs(support.pos.y - pos.y) > 0.04) {
-        this._fail(support.ok ? 'support' : support.code); return false;
-      }
-      if (!bodyClear(env, pos.x, pos.y, pos.z, WALK.height + 0.55)) { this._fail('clearance'); return false; }
-      const anchor = groundAnchor(pos, this.yaw);
+    const walk = this.walk;
+    if (walk && (this.pad.kind === 'ground' || walk.moved || walk.jump.on)) {
+      const y = walk.jump.on ? walk.jump.y : walk.pos.y;
+      const anchor = groundAnchor({ ...walk.pos, y }, this.yaw);
       // Use a private departure anchor to preserve the authored pad and delivery identity.
-      let departure = null;
-      const clear = this._firstClear(this.yaw, (heading) => {
-        if (this._clearOut(anchor, heading) < 0) return -1;
-        const d = this._planDeparture(anchor, this.spot, heading);
-        if (!this._departureClear(d, heading, env)) return -1;
-        departure = d;
-        return 0;
-      });
-      if (!clear) { this._fail('clearance', '当前站位没有安全起飞净空，请走到开阔处'); return false; }
       this.departPad = anchor;
-      this.dep = departure;
-      this.out = clear.a;
+      this.dep = this._planDeparture(anchor, this.spot, this.yaw);
+      this.out = this.yaw;
       this.away.copy(this.spot);
     }
+    if (walk?.jump.on) { walk.jump.on = false; this.game.rider.airborne = false; }
     this.lastFailure = null;
     this.game.chase.stopWalk();
     if (this.game.input) this.game.input.walking = false;
@@ -548,13 +534,24 @@ export class Landing {
         w.velocity.x += (vx - w.velocity.x) * blend;
         w.velocity.z += (vz - w.velocity.z) * blend;
         if (Math.hypot(dx, dz) > 1e-6) {
-          const move = moveGround(env, w.pos, { x: dx / (WALK.fast * h), z: dz / (WALK.fast * h) }, 0, h, true,
-            w.jump.on ? Math.max(0, w.jump.y - w.pos.y) : 0);
-          w.pos = move.pos; travelled += move.travelled;
-          if (move.blocked) { blocked = move.blocked; w.velocity.x = w.velocity.z = 0; }
-          if (move.travelled > 0) w.moved = true;
+          if (w.jump.on) {
+            // airborne: steer without ground rules, so a jump can carry her off a roof or ledge
+            if (moveAir(env, w.pos, dx, dz, w.jump.y)) {
+              w.pos.x += dx; w.pos.z += dz;
+              travelled += Math.hypot(dx, dz);
+              w.moved = true;
+            } else w.velocity.x = w.velocity.z = 0;
+          } else {
+            const move = moveGround(env, w.pos, { x: dx / (WALK.fast * h), z: dz / (WALK.fast * h) }, 0, h, true);
+            w.pos = move.pos; travelled += move.travelled;
+            if (move.blocked) { blocked = move.blocked; w.velocity.x = w.velocity.z = 0; }
+            if (move.travelled > 0) w.moved = true;
+          }
         }
-        if (w.jump.on) w.jump = moveJump(env, w.pos, w.jump, h);
+        if (w.jump.on) {
+          w.jump = moveJump(env, w.pos, w.jump, h);
+          if (!w.jump.on) w.pos.y = w.jump.y;   // touchdown: the feet's new support becomes the floor
+        }
       }
       g.rider.walkSpeed = travelled / Math.max(dt, 1e-4);
       g.rider.walkFast = g.rider.walkSpeed > WALK.speed * 1.2;
@@ -619,14 +616,6 @@ export class Landing {
     for (let pass = 0; pass < 2; pass++) for (let i = 1; i < N - 1; i++) ys[i] = Math.max(0.25 * ys[i - 1] + 0.5 * ys[i] + 0.25 * ys[i + 1], Math.min(ys[i], fl[i] + 0.8));
     ys[0] = base;
     return { x: W.x, z: W.z, dx, dz, ys, d: 0 };
-  }
-
-  _departureClear(D, heading, env) {
-    for (let d = 0; d < D.ys.length - 1; d += 0.2) {
-      const i = Math.floor(d), y = lerp(D.ys[i], D.ys[i + 1], d - i);
-      if (!airClear(env, { x: D.x + D.dx * d, y, z: D.z + D.dz * d }, heading)) return false;
-    }
-    return true;
   }
 
   _depart(f) {

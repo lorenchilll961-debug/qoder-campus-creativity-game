@@ -1,5 +1,5 @@
 // Height fields cannot resolve tunnels or stacked floors, so only the highest support is safe.
-export const WALK = Object.freeze({ radius: 0.32, height: 2.1, step: 0.26, drop: 0.32, slope: 0.65, stride: 0.2, speed: 1.2, fast: 2.8 });
+export const WALK = Object.freeze({ radius: 0.32, height: 2.1, step: 0.26, drop: 0.32, slope: 0.65, stride: 0.2, speed: 1.8, fast: 4.2 });
 export const JUMP = Object.freeze({ speed: 5.2, gravity: 16 });
 const EPS = 1e-5;
 const REASONS = {
@@ -85,18 +85,36 @@ export function moveGround(env, pos, axes, yaw, dt, fast = false, lift = 0) {
   return { pos: current, travelled, blocked };
 }
 
+// The floor a falling jump lands on: whatever now supports the feet, capped at the height the
+// jump started from (a bridge overhead is not a floor for someone standing beneath it).
+function jumpRest(env, x, z, startY) {
+  const land = env.terrain.heightAt(x, z);
+  const top = env.solid?.heightAt(x, z) ?? -Infinity;
+  const water = Math.max(0.25, env.river?.levelAt(x, z) ?? -Infinity);
+  const support = Math.max(land, top);
+  const y = support <= startY + 1e-4 ? Math.max(support, water) : Math.max(land, water);
+  return Number.isFinite(y) ? y : -Infinity;
+}
+
 export function moveJump(env, pos, jump, dt) {
   let { y, velocity, on } = jump;
   const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
   for (let i = 0; i < n && on; i++) {
-    const next = Math.max(pos.y, y + velocity * h - JUMP.gravity * h * h / 2);
+    const rest = jumpRest(env, pos.x, pos.z, pos.y);
+    const next = Math.max(rest, y + velocity * h - JUMP.gravity * h * h / 2);
     if (bodyClear(env, pos.x, Math.min(y, next), pos.z, WALK.height + Math.abs(next - y))) {
       y = next;
       velocity -= JUMP.gravity * h;
     } else velocity = Math.min(0, velocity);
-    if (y <= pos.y) { y = pos.y; velocity = 0; on = false; }
+    if (y <= rest) { y = rest; velocity = 0; on = false; }
   }
   return { y, velocity, on };
+}
+
+/** Airborne steering during a jump: no ground support or edge rules, only the body's own clearance. */
+export function moveAir(env, pos, dx, dz, feetY) {
+  if (Math.hypot(dx, dz) < 1e-9 || bodyClear(env, pos.x + dx, feetY, pos.z + dz, WALK.height)) return true;
+  return false;
 }
 
 /** A private anchor: deliberately not `pad.ground`, which already means a special town pad. */

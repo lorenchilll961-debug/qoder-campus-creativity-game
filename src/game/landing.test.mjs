@@ -138,7 +138,7 @@ test('double Space keeps the authored pad and notifies arrival once without auto
   for (let i = 0; i < 120; i++) tick(g, L, { ...idle, walkX: 1 });
   assert.equal(arrivals, 1);
   assert.equal(gameplay.courier.count, 0);
-  assert.equal(gameplay.courier.quest.status, 'available');
+  assert.equal(gameplay.courier.quest.carrying, false);
   assert.equal(special.pos.x, 0);
 });
 
@@ -147,8 +147,9 @@ test('walking has stable camera-relative axes; departure mounts at current feet,
   const { g, L } = fixture([special]);
   assert.equal(L.begin(special), true); until(g, L, 'landed');
   for (let i = 0; i < 180; i++) tick(g, L, { ...idle, walkX: 1 });
-  assert.ok(g.flight.pos.x > 3 && g.flight.pos.x < 3.6, `three-second walk: ${g.flight.pos.x}m`);
-  near(g.rider.walkSpeed, 1.2, 0.001);
+  assert.ok(g.flight.pos.x > 3 * WALK.speed - 0.6 && g.flight.pos.x < 3 * WALK.speed + 0.05,
+    `three-second walk: ${g.flight.pos.x}m`);
+  near(g.rider.walkSpeed, WALK.speed, 0.001);
   near(g.flight.pos.z, 0); // acceleration and facing change, but the camera's movement frame does not
   near(g.chase.walkView.yaw, 0);
   const before = g.flight.pos.clone();
@@ -165,32 +166,33 @@ test('walking has stable camera-relative axes; departure mounts at current feet,
   assert.equal(L.pad, special);
 });
 
-test('takeoff revalidates standing support and new obstructions, leaving the rider landed', () => {
+test('takeoff is unrestricted: a cluttered stance still mounts without a clearance veto', () => {
   const { g, L, messages } = fixture();
   assert.equal(L.beginGround().ok, true); until(g, L, 'landed');
   g.flight.props = { collide(p) { p.y += 0.1; return false; } };
   const before = g.flight.pos.clone();
-  assert.equal(L.takeoff(), false);
-  assert.equal(L.state, 'landed'); assert.ok(g.flight.pos.equals(before));
-  assert.match(messages.at(-1), /净空/);
+  assert.equal(L.takeoff(), true);
+  assert.equal(L.state, 'mount');
+  assert.equal(messages.length, 0);
+  until(g, L, 'fly');
+  assert.ok(g.flight.pos.distanceTo(before) > 1);
 });
 
-test('departure finds a different clear heading when a nearby prop blocks the facing direction', () => {
+test('departure keeps the facing heading even when a prop blocks the forward sweep', () => {
   const { g, L } = fixture();
   assert.equal(L.beginGround().ok, true); until(g, L, 'landed');
   // Beyond the standing capsule, but in the broom's forward sweep.
   g.flight.props = { collide(p, r) { if (Math.hypot(p.x, p.z + 2) < r + 0.3) { p.x += 1; return false; } return false; } };
   assert.equal(L.takeoff(), true);
-  assert.ok(Math.abs(L.out) > 0.1);
+  near(L.out, L.yaw, 1e-6);
 });
 
-test('mounting also reserves room for the hop above standing head height', () => {
+test('takeoff no longer demands hop headroom above standing head height', () => {
   const { g, L } = fixture();
   assert.equal(L.beginGround().ok, true); until(g, L, 'landed');
   g.flight.props = { collide(p) { if (p.y > 12.15) p.y += 1; return false; } };
-  assert.equal(L.takeoff(), false);
-  assert.equal(L.state, 'landed');
-  assert.equal(L.lastFailure.code, 'clearance');
+  assert.equal(L.takeoff(), true);
+  assert.equal(L.state, 'mount');
 });
 
 test('newly streamed support or path obstacles cancel ordinary approach without teleporting', () => {
@@ -223,8 +225,8 @@ test('Gameplay exposes standReady while the fixture loads no model over the netw
   assert.equal(await gameplay.standReady, undefined);
 });
 
-test('airborne jumps reject another jump and G takeoff without resetting height or velocity', () => {
-  const { g, L, gameplay, pressed, messages } = fixture();
+test('airborne jumps reject another jump, but G mounts from mid-air without waiting for touchdown', () => {
+  const { g, L, gameplay, pressed } = fixture();
   assert.equal(L.jump(), false, 'flight is not a standing jump');
   assert.equal(L.beginGround().ok, true); until(g, L, 'landed');
   assert.equal(L.jump(), true);
@@ -232,20 +234,13 @@ test('airborne jumps reject another jump and G takeoff without resetting height 
   tick(g, L, idle, 0.1);
   near(L.walk.jump.y, 10 + 5.2 * 0.1 - 16 * 0.1 ** 2 / 2);
   near(L.walk.jump.velocity, 5.2 - 16 * 0.1);
-  const jump = { ...L.walk.jump }, pos = g.flight.pos.clone();
-  assert.equal(L.jump(), false);
-  assert.equal(L.takeoff(), false);
-  assert.equal(L.lastFailure.code, 'airborne');
-  assert.match(messages.at(-1), /落地/);
-  for (const key of ['Space', 'Space2', 'KeyG']) {
-    pressed.add(key); gameplay.update(1 / 60, idle);
-    assert.equal(L.state, 'landed');
-    assert.deepEqual(L.walk.jump, jump);
-    assert.ok(g.flight.pos.equals(pos));
-    assert.equal(g.rider.airborne, true);
-    assert.equal(g.chase.walkView.on, true);
-    assert.equal(g.input.walking, true);
-  }
+  assert.equal(L.jump(), false, 'no double jump mid-air');
+  const feet = L.walk.jump.y;
+  pressed.add('KeyG'); gameplay.update(1 / 60, idle);
+  assert.equal(L.state, 'mount');
+  assert.equal(g.rider.airborne, false);
+  near(L.departPad.pos.y, feet);
+  until(g, L, 'fly');
 });
 
 test('jump follows the 5.2m/s, 16m/s² arc and keeps feet/off.y aligned through touchdown at 30/144fps', () => {
@@ -324,7 +319,7 @@ test('abort clears running, airborne, walking camera and off-broom pose state', 
 });
 
 test('walking accelerates, slows for a smooth turn instead of snapping, and brakes gradually', () => {
-  near(WALK.speed, 1.2); near(WALK.fast, 2.8);
+  near(WALK.speed, 1.8); near(WALK.fast, 4.2);
   for (const fps of [30, 144]) {
     const { g, L } = fixture();
     assert.equal(L.beginGround().ok, true); until(g, L, 'landed');
@@ -332,7 +327,7 @@ test('walking accelerates, slows for a smooth turn instead of snapping, and brak
     tick(g, L, forward, 1 / fps);
     assert.ok(g.rider.walkSpeed > 0 && g.rider.walkSpeed < 0.4, 'no instant full-speed start');
     for (let i = 1; i < fps; i++) tick(g, L, forward, 1 / fps);
-    near(g.rider.walkSpeed, 1.2, 0.001);
+    near(g.rider.walkSpeed, WALK.speed, 0.001);
     const before = g.rider.walkSpeed;
     tick(g, L, right, 1 / fps);
     assert.ok(L.yaw > 0 && L.yaw < Math.PI / 2 - 0.1, `first turn frame: ${L.yaw}`);
@@ -607,8 +602,8 @@ test('Mage walk/run playback rate follows measured movement speed, including acc
       if (S.state === 'Walk') sawWalk = true;
       if (S.state === 'Run') sawRun = true;
     }
-    if (ctl.walkFast) near(rider.walkSpeed, 2.8, 0.001);
-    else if (ctl.walkZ) near(rider.walkSpeed, 1.2, 0.001);
+    if (ctl.walkFast) near(rider.walkSpeed, WALK.fast, 0.001);
+    else if (ctl.walkZ) near(rider.walkSpeed, WALK.speed, 0.001);
   }
   assert.ok(sawWalk && sawRun);
   assert.equal(S.state, 'Idle');
