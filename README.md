@@ -1,6 +1,6 @@
 # 花信风
 
-**骑上魔毯，穿过二十四节气，在云雀港送信、飞越秋英坡故宫，追踪两条赤脊巨龙。**
+**骑上魔毯，穿过二十四节气，在云雀港送信、飞越秋英坡故宫，追踪三条赤脊巨龙。**
 
 《花信风》是面向桌面浏览器的中文海岛探索游戏，也是 Qoder 高校创造力大赛作品。你可以从海面飞到城镇屋顶，落地后步行、奔跑或跳跃，在街巷和宫院之间自由探索。第一份委托从云雀港信使公会出发，把春茶送到露台茶馆。
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | **魔毯飞行与自由落地** · 借风掠过草甸、海崖和城镇。选好落点后可步行、跳跃，再骑上魔毯。 | ![魔毯掠过海岛花田](screenshots/features/01-carpet-flight.jpg) |
 | **秋英坡故宫** · 漫游中轴、六组配院和宫外市集。护城河有流动水纹，宫殿窗格和市集灯笼会在入暮后亮起。 | ![秋英坡故宫的宫殿、院落和护城河](screenshots/features/02-palace-courtyards.jpg) |
-| **双龙与可重建工坊** · 两条赤脊巨龙在岛内独立换线、轮流俯冲喷火。工坊受击后屋顶、墙体碎裂，残骸约 8 秒后开始自行重组。 | ![巨龙俯冲喷火，击碎守望工坊](screenshots/features/07-fire-and-destruction.jpg) |
+| **三龙与可重建庄园** · 三条巨龙飞遍六座庄园，轮流俯冲喷火。受击建筑的屋顶与墙体碎裂，残骸约 8 秒后开始自行重组。 | ![巨龙俯冲喷火，击碎守望工坊](screenshots/features/07-fire-and-destruction.jpg) |
 | **街巷信使与居民** · 和 NPC 交谈，在八个站点接单，同时携带多单，并在同站批量交付。 | ![信使公会的居民和配送对话](screenshots/desktop-release.jpg) |
 | **航图与二十四节气** · 探索地形、标记地点和追踪配送路线。可切换节气、昼夜和天气，航图与配送进度会随存档保留。 | ![世界航图上的地点、配送路线和探索进度](screenshots/features/10-world-map.jpg) |
 
@@ -26,7 +26,7 @@ python3 tools/serve.py 6280
 
 按 **M** 打开航图。选择「定位故宫」查看宫城位置，选择「飞往故宫」抵达午门广场上空。午门广场、太和门前广场和东观景台都有金光落点，在落点附近双击空格可请求降落。
 
-追踪「秋英坡守望工坊」可找到巨龙活动区。可用 [巨龙演示入口](http://localhost:6280/?dragon&q=low&dpr=1) 观看巡航、喷火与重建。
+打开航图可追踪六座庄园。五座小庄园各有三间房、花园和小径，绿野大庄园有六间房、庭院和果园。可用 [巨龙演示入口](http://localhost:6280/?dragon&q=low&dpr=1) 观看巡航、喷火与重建，或切换到[第三条巨龙的跟拍视角](http://localhost:6280/?dragon=3&q=low&dpr=1)。
 
 ### 先送完第一单
 
@@ -51,7 +51,7 @@ python3 tools/serve.py 6280
 
 ## 开发与测试
 
-项目使用原生 JavaScript、Three.js r187、WebGL2 和自定义 GLSL。渲染与世界状态在 `src/core/`，飞行和角色在 `src/player/`，任务与交互在 `src/game/`，环境变化在 `src/seasons/`，航图与界面在 `src/ui/`，双龙和工坊在 `src/dragon/`，宫城集成在 `src/world/palace.js`。
+项目使用原生 JavaScript、Three.js r187、WebGL2 和自定义 GLSL。渲染与世界状态在 `src/core/`，飞行和角色在 `src/player/`，任务与交互在 `src/game/`，环境变化在 `src/seasons/`，航图与界面在 `src/ui/`，巨龙和庄园在 `src/dragon/`，宫城集成在 `src/world/palace.js`。
 
 安装开发依赖后，使用 Node.js 24 或更新版本运行本地回归测试：
 
@@ -79,4 +79,4 @@ node --test src/core/*.test.mjs src/game/*.test.mjs src/seasons/*.test.mjs src/u
 | [Dragon: Flight Playground](https://github.com/clyons/dragon-flight-til) | Three.js r186、Box3D WASM 0.2.0、Vite 8.3。参考样条导航和关节滞后。原模型翼固定，模型资产采用 CC BY-NC-SA 4.0。 |
 | [three-pinata](https://github.com/dgreenheck/three-pinata) | Three.js peer 版本要求 ≥ r158。参考平面切割、封闭截面以及内外双材质，自行在 r187 上实现工坊构件的凸网格切割。 |
 
-两条巨龙都使用原创参数化网格。双翼各有肩、肘、腕和五根翼指骨，推进、滑翔、俯冲和拉升共享同一套骨骼。破坏目前覆盖守望工坊。每条随机路线会检查岛内地表高度、翼尖净空和两龙间距。
+三条巨龙都使用原创参数化网格，第三条体型最大。双翼各有肩、肘、腕和五根翼指骨，推进、滑翔、俯冲和拉升共享同一套骨骼。每局随机选择巡航起点，各龙错开出发位置和巡航高度，沿检查过地形净空的路线飞遍六座庄园。每座庄园的建筑都有独立碎裂和重建状态。
