@@ -43,12 +43,25 @@ kbd {
 /* ---------- hud ---------- */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 3; transition: opacity 0.6s ease; text-shadow: 0 1px 12px rgba(0, 20, 50, 0.55); }
 #hud.quiet { opacity: 0; }
+#hud.quiet .hud-panel { visibility: hidden; }
+.hud-panel { position: absolute; display: flex; flex-direction: column; gap: 6px; }
+.season-dock { left: max(32px, env(safe-area-inset-left)); bottom: max(104px, env(safe-area-inset-bottom)); align-items: flex-start; }
+.hud-panel-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 8px;
+  border: 1px solid #abd0c455; border-radius: 7px; background: #17352ee6; color: var(--ink);
+  font: 500 12px system-ui, sans-serif; cursor: pointer; pointer-events: auto;
+}
+.hud-panel-toggle kbd { margin: 0; padding: 1px 4px; min-width: 16px; }
+.hud-panel-toggle::after { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1px 1px 0; transform: rotate(45deg); }
+.season-dock .hud-panel-toggle::after,
+.hud-tr .hud-panel-toggle[aria-expanded="true"]::after { transform: rotate(225deg); }
+.season-dock .hud-panel-toggle[aria-expanded="true"]::after { transform: rotate(45deg); }
+.hud-panel-toggle:hover, .hud-panel-toggle:focus-visible { border-color: var(--gold); }
 .season-panel {
   --world-amber: #f4cb88; --world-mint: #a9ddcc; --world-muted: #b5c6ca;
   --world-line: rgba(172, 206, 203, 0.24);
-  position: absolute; left: max(32px, env(safe-area-inset-left)); bottom: max(104px, env(safe-area-inset-bottom));
   width: 272px; max-width: calc(50vw - 48px); padding: 16px;
-  max-height: calc(100dvh - 232px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  max-height: calc(100dvh - 270px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
   scrollbar-color: #647d7e transparent; scroll-padding-block: 8px; overflow-wrap: anywhere;
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   color: #e9f0ed; text-shadow: none; color-scheme: dark;
@@ -56,7 +69,6 @@ kbd {
   background: linear-gradient(150deg, rgba(24, 40, 46, 0.95), rgba(13, 26, 33, 0.93));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
-#hud.quiet .season-panel { visibility: hidden; pointer-events: none; }
 .season-panel:focus-visible { outline: 2px solid var(--world-mint); outline-offset: 4px; }
 .season-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 .season-stage { font-size: 11px; font-weight: 400; color: var(--world-muted); }
@@ -144,10 +156,10 @@ kbd {
 .world-save-status[data-level="saved"]::before { content: ""; display: inline-block; width: 4px; height: 4px; margin-right: 8px; vertical-align: middle; background: var(--world-mint); }
 .season-panel .world-save-status[data-level="warning"] { color: var(--world-amber); padding-left: 8px; border-left: 2px solid var(--world-amber); }
 @media (max-width: 700px), (max-height: 580px) {
+  .season-dock { left: max(16px, env(safe-area-inset-left)); bottom: max(80px, env(safe-area-inset-bottom)); }
   .season-panel {
-    left: max(16px, env(safe-area-inset-left)); bottom: max(80px, env(safe-area-inset-bottom));
     width: 248px; max-width: calc(50vw - 32px); padding: 8px;
-    max-height: calc(100dvh - 200px);
+    max-height: calc(100dvh - 238px);
   }
   .world-controls { margin-top: 8px; }
 }
@@ -177,7 +189,7 @@ kbd {
 .compass svg { color: var(--gold); filter: drop-shadow(0 0 6px rgba(255, 211, 107, 0.7)); transition: transform 0.12s linear; }
 
 /* ---------- errands: the parcel (top right), the landing prompt, the delivery card, the trick ---------- */
-.hud-tr { position: absolute; right: 32px; top: 26px; text-align: right; }
+.hud-tr { right: 32px; top: 26px; align-items: flex-end; text-align: right; }
 .job-kicker { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.75; }
 .job-icon {
   display: inline-block; width: 12px; height: 11px; margin-right: 10px; border-radius: 2px; vertical-align: -1px;

@@ -30,6 +30,7 @@ import { SeasonWeather } from './seasons/weather.js';
 import { SaveService } from './core/save.js';
 import { WorldState } from './core/world-state.js';
 import { WorldControls } from './ui/world-controls.js';
+import { bindHudPanel } from './ui/hud-panel.js';
 import { AtlasState, worldLandmarks } from './core/atlas-state.js';
 import { createIslandDragon } from './dragon/index.js';
 
@@ -247,6 +248,8 @@ function start() {
   canvas.focus({ preventScroll: true });
   // (where the lock is refused - an embedded frame, say - the keyboard still flies the broom)
   game.gameplay.courier.start();
+  bindHudPanel($('hud'), $('seasonPanel'), 'KeyH', canvas);
+  bindHudPanel($('hud'), $('jobPanel'), 'KeyK', canvas);
   if (!game.paused) canvas.requestPointerLock?.()?.catch?.(() => {});
 }
 

@@ -31,93 +31,99 @@
     <div class="trick" id="trick" hidden><kbd>Q</kbd>凌空翻身</div>
   </div>
   <div class="hud-br"><span id="speed">0</span><small>km/h</small></div>
-  <div class="hud-tr" id="job" hidden>
-    <div class="job-kicker"><span class="job-icon"></span><span id="jobStatus">新手委托 · 等待接单</span></div>
-    <div class="job-name"><span id="jobName"></span><span class="job-spot" id="jobSpot"></span></div>
-    <div class="job-meta"><span class="compass" id="jobCompass" title="包裹的去向"><svg viewBox="-12 -12 24 24" width="22" height="22"><path d="M0 -9 L5 6 L0 3 L-5 6 Z" fill="currentColor"/></svg><span id="jobDist"></span></span><span class="job-count">已送 <span id="jobCount">0</span> 单</span></div>
-    <div class="job-nav"><span id="jobTracking">订单目标</span><span id="jobHeight"></span></div>
-    <p class="job-objective" id="jobObjective" aria-live="polite">按 M 看地图，前往信使公会接单。</p>
-    <div class="job-wallet">风铃币 <span id="jobCoins">0</span> · 首单报酬 30</div>
-    <button type="button" class="delivery-map-button" id="openWorldMap">M 世界地图</button>
+  <div class="hud-tr hud-panel" id="job" hidden>
+    <button type="button" class="hud-panel-toggle" aria-controls="jobPanel" aria-expanded="true" aria-keyshortcuts="K">委托 <kbd>K</kbd></button>
+    <section id="jobPanel" aria-label="委托详情">
+      <div class="job-kicker"><span class="job-icon"></span><span id="jobStatus">新手委托 · 等待接单</span></div>
+      <div class="job-name"><span id="jobName"></span><span class="job-spot" id="jobSpot"></span></div>
+      <div class="job-meta"><span class="compass" id="jobCompass" title="包裹的去向"><svg viewBox="-12 -12 24 24" width="22" height="22"><path d="M0 -9 L5 6 L0 3 L-5 6 Z" fill="currentColor"/></svg><span id="jobDist"></span></span><span class="job-count">已送 <span id="jobCount">0</span> 单</span></div>
+      <div class="job-nav"><span id="jobTracking">订单目标</span><span id="jobHeight"></span></div>
+      <p class="job-objective" id="jobObjective" aria-live="polite">按 M 看地图，前往信使公会接单。</p>
+      <div class="job-wallet">风铃币 <span id="jobCoins">0</span> · 首单报酬 30</div>
+      <button type="button" class="delivery-map-button" id="openWorldMap">M 世界地图</button>
+    </section>
   </div>
-  <section class="season-panel" id="seasonPanel" tabindex="0" aria-label="世界环境：时间、天气与节气，可滚动查看详情">
-    <div class="season-heading"><span>四时流转</span><span class="season-stage">世界环境</span></div>
-    <details class="world-controls" id="worldControls">
-      <summary title="展开或收起时间与天气控件">
-        <span class="world-clock-line">
-          <span class="world-day" id="worldDay">第—天</span>
-          <time class="world-time" id="worldTime">--:--</time>
-          <span class="world-phase" id="worldPhase">—</span>
-        </span>
-        <span class="world-weather-line">
-          <span class="world-clock-dot" aria-hidden="true"></span>
-          <span class="world-weather-name" id="worldWeatherName">—</span>
-          <span class="world-clock-state" id="worldClockState">等待世界状态</span>
-        </span>
-      </summary>
-      <div class="world-controls-body">
-        <div class="world-control-heading"><span>时间与天气</span><span>观察控件</span></div>
-        <div class="world-time-options" role="group" aria-label="跳转到指定时段">
-          <button type="button" data-world-hour="5.5" data-world-phase="黎明" aria-label="跳至黎明，05:30" aria-pressed="false" disabled>黎明</button>
-          <button type="button" data-world-hour="8" data-world-phase="清晨" aria-label="跳至清晨，08:00" aria-pressed="false" disabled>清晨</button>
-          <button type="button" data-world-hour="12" data-world-phase="正午" aria-label="跳至正午，12:00" aria-pressed="false" disabled>正午</button>
-          <button type="button" data-world-hour="15" data-world-phase="午后" aria-label="跳至午后，15:00" aria-pressed="false" disabled>午后</button>
-          <button type="button" data-world-hour="18.5" data-world-phase="黄昏" aria-label="跳至黄昏，18:30" aria-pressed="false" disabled>黄昏</button>
-          <button type="button" data-world-hour="0" data-world-phase="深夜" aria-label="跳至深夜，00:00" aria-pressed="false" disabled>深夜</button>
+  <div class="hud-panel season-dock">
+    <section class="season-panel" id="seasonPanel" tabindex="0" aria-label="世界环境：时间、天气与节气，可滚动查看详情">
+      <div class="season-heading"><span>四时流转</span><span class="season-stage">世界环境</span></div>
+      <details class="world-controls" id="worldControls">
+        <summary title="展开或收起时间与天气控件">
+          <span class="world-clock-line">
+            <span class="world-day" id="worldDay">第—天</span>
+            <time class="world-time" id="worldTime">--:--</time>
+            <span class="world-phase" id="worldPhase">—</span>
+          </span>
+          <span class="world-weather-line">
+            <span class="world-clock-dot" aria-hidden="true"></span>
+            <span class="world-weather-name" id="worldWeatherName">—</span>
+            <span class="world-clock-state" id="worldClockState">等待世界状态</span>
+          </span>
+        </summary>
+        <div class="world-controls-body">
+          <div class="world-control-heading"><span>时间与天气</span><span>观察控件</span></div>
+          <div class="world-time-options" role="group" aria-label="跳转到指定时段">
+            <button type="button" data-world-hour="5.5" data-world-phase="黎明" aria-label="跳至黎明，05:30" aria-pressed="false" disabled>黎明</button>
+            <button type="button" data-world-hour="8" data-world-phase="清晨" aria-label="跳至清晨，08:00" aria-pressed="false" disabled>清晨</button>
+            <button type="button" data-world-hour="12" data-world-phase="正午" aria-label="跳至正午，12:00" aria-pressed="false" disabled>正午</button>
+            <button type="button" data-world-hour="15" data-world-phase="午后" aria-label="跳至午后，15:00" aria-pressed="false" disabled>午后</button>
+            <button type="button" data-world-hour="18.5" data-world-phase="黄昏" aria-label="跳至黄昏，18:30" aria-pressed="false" disabled>黄昏</button>
+            <button type="button" data-world-hour="0" data-world-phase="深夜" aria-label="跳至深夜，00:00" aria-pressed="false" disabled>深夜</button>
+          </div>
+          <button type="button" class="world-running" id="worldRunning" aria-label="暂停世界时钟" aria-describedby="worldControlHint" disabled>暂停时钟</button>
+          <label class="world-weather-label" for="worldWeather">天气</label>
+          <select id="worldWeather" aria-describedby="worldControlHint" disabled>
+            <option value="seasonal">随节气</option>
+            <option value="clear">晴</option>
+            <option value="cloudy">多云</option>
+            <option value="overcast">阴</option>
+            <option value="rain">雨</option>
+            <option value="downpour">暴雨</option>
+            <option value="thunder">雷雨</option>
+            <option value="fog">雾</option>
+            <option value="snow">雪</option>
+            <option value="wind">强风</option>
+          </select>
+          <p class="world-control-hint" id="worldControlHint">等待世界状态</p>
         </div>
-        <button type="button" class="world-running" id="worldRunning" aria-label="暂停世界时钟" aria-describedby="worldControlHint" disabled>暂停时钟</button>
-        <label class="world-weather-label" for="worldWeather">天气</label>
-        <select id="worldWeather" aria-describedby="worldControlHint" disabled>
-          <option value="seasonal">随节气</option>
-          <option value="clear">晴</option>
-          <option value="cloudy">多云</option>
-          <option value="overcast">阴</option>
-          <option value="rain">雨</option>
-          <option value="downpour">暴雨</option>
-          <option value="thunder">雷雨</option>
-          <option value="fog">雾</option>
-          <option value="snow">雪</option>
-          <option value="wind">强风</option>
-        </select>
-        <p class="world-control-hint" id="worldControlHint">等待世界状态</p>
+      </details>
+      <p class="world-save-status" id="worldSaveStatus" role="status" aria-atomic="true"></p>
+      <div class="season-modes" role="group" aria-label="环境模式">
+        <button type="button" data-season-mode="seasons" aria-pressed="true">四季快捷</button>
+        <button type="button" data-season-mode="terms" aria-pressed="false">二十四节气</button>
       </div>
-    </details>
-    <p class="world-save-status" id="worldSaveStatus" role="status" aria-atomic="true"></p>
-    <div class="season-modes" role="group" aria-label="环境模式">
-      <button type="button" data-season-mode="seasons" aria-pressed="true">四季快捷</button>
-      <button type="button" data-season-mode="terms" aria-pressed="false">二十四节气</button>
-    </div>
-    <div class="season-options" role="group" aria-label="选择季节">
-      <button type="button" data-season="spring" aria-pressed="false" aria-label="春季"><kbd>1</kbd>春</button>
-      <button type="button" data-season="summer" aria-pressed="true" aria-label="夏季（原始环境）"><kbd>2</kbd>夏</button>
-      <button type="button" data-season="autumn" aria-pressed="false" aria-label="秋季"><kbd>3</kbd>秋</button>
-      <button type="button" data-season="winter" aria-pressed="false" aria-label="冬季"><kbd>4</kbd>冬</button>
-    </div>
-    <div class="term-controls" id="termControls" hidden>
-      <label for="solarTerm">选择节气 <span id="termPosition"></span></label>
-      <div class="term-navigation">
-        <button type="button" id="previousTerm" aria-label="上一个节气">‹</button>
-        <select id="solarTerm" aria-describedby="seasonDescription"></select>
-        <button type="button" id="nextTerm" aria-label="下一个节气">›</button>
+      <div class="season-options" role="group" aria-label="选择季节">
+        <button type="button" data-season="spring" aria-pressed="false" aria-label="春季"><kbd>1</kbd>春</button>
+        <button type="button" data-season="summer" aria-pressed="true" aria-label="夏季（原始环境）"><kbd>2</kbd>夏</button>
+        <button type="button" data-season="autumn" aria-pressed="false" aria-label="秋季"><kbd>3</kbd>秋</button>
+        <button type="button" data-season="winter" aria-pressed="false" aria-label="冬季"><kbd>4</kbd>冬</button>
       </div>
-    </div>
-    <p id="seasonDescription"></p>
-    <p class="term-marker" id="termMarker" hidden></p>
-    <details class="term-details" id="termDetails" hidden>
-      <summary>节气特征与农事</summary>
-      <p id="termDate"></p>
-      <p id="termClimate"></p>
-      <dl>
-        <dt>风候</dt><dd id="termWind"></dd>
-        <dt>物候</dt><dd id="termPhenology"></dd>
-        <dt>农事</dt><dd id="termFarming"></dd>
-      </dl>
-      <small>温带海岛的艺术化示意，非实时天气或各地统一气候；节气昼长联动日出、日落，光照随世界时钟变化。</small>
-    </details>
-    <p id="seasonStatus" role="status" aria-live="polite"></p>
-    <progress id="seasonProgress" max="1" value="1" aria-label="季节过渡进度"></progress>
-    <small>数字 1–4 返回四季 · Esc 释放鼠标后选节气</small>
-  </section>
+      <div class="term-controls" id="termControls" hidden>
+        <label for="solarTerm">选择节气 <span id="termPosition"></span></label>
+        <div class="term-navigation">
+          <button type="button" id="previousTerm" aria-label="上一个节气">‹</button>
+          <select id="solarTerm" aria-describedby="seasonDescription"></select>
+          <button type="button" id="nextTerm" aria-label="下一个节气">›</button>
+        </div>
+      </div>
+      <p id="seasonDescription"></p>
+      <p class="term-marker" id="termMarker" hidden></p>
+      <details class="term-details" id="termDetails" hidden>
+        <summary>节气特征与农事</summary>
+        <p id="termDate"></p>
+        <p id="termClimate"></p>
+        <dl>
+          <dt>风候</dt><dd id="termWind"></dd>
+          <dt>物候</dt><dd id="termPhenology"></dd>
+          <dt>农事</dt><dd id="termFarming"></dd>
+        </dl>
+        <small>温带海岛的艺术化示意，非实时天气或各地统一气候；节气昼长联动日出、日落，光照随世界时钟变化。</small>
+      </details>
+      <p id="seasonStatus" role="status" aria-live="polite"></p>
+      <progress id="seasonProgress" max="1" value="1" aria-label="季节过渡进度"></progress>
+      <small>数字 1–4 返回四季 · Esc 释放鼠标后选节气</small>
+    </section>
+    <button type="button" class="hud-panel-toggle" aria-controls="seasonPanel" aria-expanded="true" aria-keyshortcuts="H">四时流转 <kbd>H</kbd></button>
+  </div>
   <div class="prompt" id="prompt"></div>
   <div class="card" id="card"><div class="card-kicker" id="cardKicker"></div><div class="card-name" id="cardName"></div><div class="card-sub" id="cardSub"></div></div>
   <div class="toast" id="toast"></div>
@@ -149,7 +155,7 @@
       <div><kbd>M</kbd> 世界地图 · <kbd>E</kbd> 接单 / 交货 · <kbd>N</kbd> 静音</div>
       <div><kbd>P</kbd> 隐藏界面 · <kbd>J</kbd> 手记</div>
       <div><kbd>1–4</kbd> 四季快捷 · 面板选择二十四节气 · 夏季恢复原景</div>
-      <div>魔毯素材：<a href="https://poly.pizza/m/b5etBd2ELng" target="_blank" rel="noopener noreferrer">Anna M · Poly Pizza</a> · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a> · 已调整尺寸与动态</div>
+      <div><kbd>H</kbd> 四时流转 · <kbd>K</kbd> 委托 · <kbd>Esc</kbd> 释放鼠标</div>
     </div>
   </div>
 </div>
