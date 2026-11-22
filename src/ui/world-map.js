@@ -70,10 +70,10 @@ export class WorldMap {
         <div class="wm-surface"><canvas role="img" aria-label="真实地形航图，上北下南。可在右侧地点列表选择与追踪。"></canvas>
           <span class="wm-north" aria-hidden="true">↑<br>北 N</span><span class="wm-map-hint">暗色区域尚未探索</span><span class="wm-hover" hidden></span></div>
         <div class="wm-toolbar" role="group" aria-label="地图视图"><button type="button" data-action="all">全岛总览</button>
-          <button type="button" data-action="route">查看航线</button><button type="button" data-action="player">回到玩家</button>
+          <button type="button" data-action="palace" hidden>飞往故宫</button><button type="button" data-action="route">查看航线</button><button type="button" data-action="player">回到玩家</button>
           <div class="wm-zoom"><button type="button" data-action="out" aria-label="缩小地图">−</button><output aria-label="缩放倍数"></output>
           <button type="button" data-action="in" aria-label="放大地图">+</button></div></div>
-        <p class="wm-position"></p></section>
+        <p class="wm-position"></p><p class="wm-position wm-palace-status" role="status" hidden></p></section>
         <aside class="wm-sidebar" aria-label="地点与标记">
           <section class="wm-exploration"><div><h3>探索记录</h3><span class="wm-progress-text"></span></div><progress max="100" value="0" aria-label="全岛探索进度"></progress><p class="wm-discoveries"></p></section>
           <section class="wm-deliveries" aria-label="配送站点与随身订单">
@@ -165,6 +165,7 @@ export class WorldMap {
   get isOpen() { return this.modal.isOpen; }
   open() {
     if (this.modal.isOpen || !this.modal.show()) return false;
+    this.dialog.querySelector('.wm-palace-status').hidden = true;
     this.render();
     this.courier.mapOpened?.();
     return true;
@@ -211,6 +212,14 @@ export class WorldMap {
   }
   action(action) {
     if (action === 'close') this.close();
+    else if (action === 'palace') {
+      if (this.game.switchPalace?.()) this.close();
+      else {
+        const message = this.dialog.querySelector('.wm-palace-status');
+        message.textContent = '请先返回游戏，按 G 起飞后再切换区域。';
+        message.hidden = false;
+      }
+    }
     else if (action === 'all') this.setView({ x: 0, z: 0, span: this.world * 1.08 });
     else if (action === 'route') this.setView(fitView(this.routePoints(), this.world, this.w, this.h));
     else if (action === 'player' && valid(this.game.flight.pos)) this.setView({ ...this.game.flight.pos, span: Math.min(this.view.span, this.world / 4) });
@@ -490,6 +499,10 @@ export class WorldMap {
     q('[data-action="quest"]').disabled = !this.courier.target || atlas.tracking?.kind === 'quest';
     q('[data-action="stop"]').disabled = !atlas.tracking;
     q('[data-action="route"]').disabled = !target;
+    const palaceButton = q('[data-action="palace"]');
+    palaceButton.hidden = !this.game.palace;
+    if (this.game.palace) palaceButton.textContent = this.game.palace.collision.contains(player.x, player.z)
+      ? '返回海岛航线' : '飞往故宫';
     q('.wm-position').textContent = `玩家 X ${player.x.toFixed(1)} / Z ${player.z.toFixed(1)} · 高度 ${player.y.toFixed(2)} 米` +
       (target ? `｜目标 X ${target.pos.x.toFixed(1)} / Z ${target.pos.z.toFixed(1)} · 水平距离 ${Math.hypot(target.pos.x - player.x, target.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(target.pos.y - player.y)} 米` : '');
     q('.wm-progress-text').textContent = `${atlas.percent.toFixed(1)}%`;

@@ -113,6 +113,10 @@ async function boot() {
   const riderLoad = Rider.load(renderer);
   const propsLoad = Props.load();
   const townLoad = Town.load(renderer);
+  const palaceModule = import('./world/palace.js').catch(error => {
+    console.warn('故宫场景无法加载', error);
+    return null;
+  });
   // the bar breathes with the bytes while the island streams in
   const terrainLoad = Terrain.load(renderer);
   for (;;) {
@@ -153,6 +157,15 @@ async function boot() {
   const town = (game.town = await townLoad);
   world.add(town.group);
   town.bakeShadows();
+  try {
+    const palace = (game.palace = (await palaceModule)?.createPalace(terrain));
+    if (palace) {
+      world.add(palace.group, palace.sun, palace.fill);
+      game.switchPalace = switchPalace;
+    }
+  } catch (error) {
+    console.warn('故宫场景无法生成', error);
+  }
   // hidden places and their treasures (their models load later, as the rider comes near)
   const places = (game.places = await Places.load(renderer, terrain, game.save));
   world.add(places.group);
@@ -390,6 +403,16 @@ function render(dt) {
   game.terrain.select(game.terrain.mainView, camera);
   game.meadow.update(camera);
   game.town.update(dt, U.uTime.value, camera);
+  if (game.palace) {
+    const { sun, fill } = game.palace;
+    const color = U.uSunColor.value;
+    const sky = U.uAmbSky.value;
+    sun.position.copy(U.uSunDir.value);
+    sun.color.setRGB(color.x, color.y, color.z);
+    sun.intensity = 1.1;
+    fill.color.setRGB(sky.x, sky.y, sky.z);
+    fill.intensity = 2.5;
+  }
   game.water.update(camera);
   renderer.info.reset();
   pipeline.render(world, camera, dt);
@@ -423,6 +446,7 @@ function shoreNear(dt) {
 function placeName() {
   const p = game.flight.pos, m = game.terrain.meta, T = game.terrain;
   const ground = T.heightAt(p.x, p.z);
+  if (game.palace?.collision.contains(p.x, p.z)) return '故宫';
   const town = game.town.nameAt(p.x, p.z);
   if (town) return town;
   if (Math.hypot(p.x - m.peak[0], p.z - m.peak[2]) < 240 && p.y > m.peak[1] - 110) return '鹪鹩王冠';
@@ -547,6 +571,27 @@ function goggles(dt) {
       gEl.parcelDist.textContent = far(Math.hypot(t.pos.x - f.pos.x, t.pos.z - f.pos.z));
     } else gEl.parcel.hidden = true;
   }
+}
+
+// The map changes location within the same world, so the active task and save stay in memory.
+function switchPalace() {
+  const { flight, gameplay, palace } = game;
+  if (!palace || game.state !== 'play') return false;
+  const leaving = palace.collision.contains(flight.pos.x, flight.pos.z);
+  if (gameplay.landing.busy || flight.auto) return false;
+  if (!leaving) {
+    palace.returnFlight = { pos: flight.pos.clone(), yaw: THREE.MathUtils.radToDeg(flight.yaw) };
+  }
+  const destination = leaving ? palace.returnFlight?.pos ?? palace.exit : palace.landmark.pos;
+  const cover = flight.coverAt(destination.x, destination.z, game.time);
+  const y = Math.max(cover + (leaving ? 10 : 17), destination.y);
+  const yaw = leaving ? palace.returnFlight?.yaw ?? 180 : 0;
+  game.fly(destination.x, destination.z, y - flight.surfaceAt(destination.x, destination.z, game.time), yaw);
+  gameplay.hush = 0;
+  game.input.clear();
+  if (leaving) palace.returnFlight = null;
+  game.toast(leaving ? '返回海岛航线' : '已到午门广场上空 · 按 G 降落步行');
+  return true;
 }
 
 // ---------------------------------------------------------------------------------- debug hooks

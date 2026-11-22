@@ -11,7 +11,7 @@ export const groundFailure = (code) => ({ ok: false, code, why: REASONS[code] ||
 
 function supportAt(env, x, z) {
   const land = env.terrain.heightAt(x, z);
-  const top = env.solid?.heightAt(x, z) ?? -Infinity;
+  const top = env.solid?.groundHeightAt?.(x, z) ?? env.solid?.heightAt(x, z) ?? -Infinity;
   const y = Math.max(land, top);
   if (!Number.isFinite(land) || !Number.isFinite(y) || y < -1e8) return groundFailure('support');
   const water = Math.max(0.25, env.river?.levelAt(x, z) ?? -Infinity);
@@ -89,7 +89,7 @@ export function moveGround(env, pos, axes, yaw, dt, fast = false, lift = 0) {
 // jump started from (a bridge overhead is not a floor for someone standing beneath it).
 function jumpRest(env, x, z, startY) {
   const land = env.terrain.heightAt(x, z);
-  const top = env.solid?.heightAt(x, z) ?? -Infinity;
+  const top = env.solid?.groundHeightAt?.(x, z) ?? env.solid?.heightAt(x, z) ?? -Infinity;
   const water = Math.max(0.25, env.river?.levelAt(x, z) ?? -Infinity);
   const support = Math.max(land, top);
   const y = support <= startY + 1e-4 ? Math.max(support, water) : Math.max(land, water);

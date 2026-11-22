@@ -9,6 +9,7 @@
 ## 岛上能做什么
 
 - **从空中到街巷。** 借风加速、贴着海面掠行，再挑一处留有净空的屋顶或地面降落。落地后可以步行、奔跑和跳跃，走近居民接单或交货。
+- **飞进秋英坡的故宫。** 打开航图（M），选择「飞往故宫」抵达午门广场上空，可在午门广场、太和门前广场与东观景台的金光附近双击空格降落，或在适合着陆的脚下按 G。落地后用 WASD 步行、空格跳跃，再按 G 起飞。可在航图选择「返回海岛航线」，也可直接飞离。
 - **读一张会留下足迹的航图。** 航图能筛选城镇、停靠平台和探索地点，随你的飞行揭开未探索区域。你可以给地点命名、放置标记、切换追踪目标，下次回来还接得上。
 - **看同一座岛过不同的日子。** 从春花、夏绿到秋色、冬雪，二十四节气带来不同的景观与天气。世界时钟从白昼走到夜里，港口窗灯会亮起来。也可以在环境面板手动切换时段、节气和天气。
 - **留下一份自己的信使手记。** 送完首单可领一次 30 枚风铃币，旅途中还能收集风之籽与散落在岛上的珍藏。航图、环境和配送进度会保存在当前浏览器。
@@ -51,13 +52,14 @@ python3 tools/serve.py 6280
 使用 Node.js 24 或更新版本运行本地回归测试：
 
 ```bash
-node --test src/core/*.test.mjs src/game/*.test.mjs src/seasons/*.test.mjs src/ui/*.test.mjs
+node --test src/core/*.test.mjs src/game/*.test.mjs src/seasons/*.test.mjs src/ui/*.test.mjs src/world/*.test.mjs
 ```
 
 全岛共有 8 个配送站点，地面和屋顶各 4 个。可以反复接单、同时携带多单，在航图中选择追踪的目的地。订单、奖励和探索进度保存在当前浏览器，换浏览器或访问地址后需要重新开始。世界素材的制作流程见 [城镇制作工具](tools/town/README.md)。
 
 ## 许可与素材署名
 
+- 故宫的宫殿构件、程序化材质和布局数据来自陈华山、陈诺创作的 [故宫 3D 虚拟游览](https://github.com/watsonbkeel/forbidden-city-3d)，基准提交 [8de5c83](https://github.com/watsonbkeel/forbidden-city-3d/commit/8de5c83d25a669a014575a1489429f064a464496)，见随附的 [MIT 许可](vendor/forbidden-city/LICENSE)。岛上版本是缩尺外景，覆盖中轴、部分东西六宫及御花园。GLB 内景保留在上游项目。午门、太和门及太和殿的外观参照[故宫博物院午门](https://www.dpm.org.cn/explore/building/236454.html)、[太和门](https://www.dpm.org.cn/explore/building/236439.html)和[太和殿](https://www.dpm.org.cn/explore/building/236465.html)的建筑介绍。东观景台是为游戏设置的着陆设施。
 - 源码版权与许可见 [LICENSE](LICENSE)，渲染依赖许可见 [Three.js 许可](vendor/three/LICENSE)。
 - 法师模型与动画来自 KayKit Adventurers，见 [模型许可](assets/models/characters/KayKit-LICENSE.txt)。
 - 魔毯模型由 Anna M 创作，许可为 CC BY 3.0，见 [署名与修改记录](assets/models/vehicles/magic-carpet-LICENSE.txt)。
