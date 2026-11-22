@@ -64,11 +64,20 @@ export class Gameplay {
     const real = town && Array.isArray(town.pads) ? town.pads : [];
     this.town = town;
     this.nPads = real.length;
-    this.pads = fix ? [...real, ...fix.pads] : real.slice();
+    this.pads = [...real, ...(fix?.pads || []), ...(g.palace?.pads || [])];
 
-    // what the broom (and the camera) cannot fly through
-    let solid = town && typeof town.heightAt === 'function' ? town : null;
-    if (fix) solid = solid ? { heightAt: (x, z) => Math.max(town.heightAt(x, z), fix.heightAt(x, z)) } : fix;
+    // Share the world collision with flight, landing, walking and effects.
+    const island = town && typeof town.heightAt === 'function' ? town : null;
+    const palace = g.palace?.collision;
+    const surfaces = [island, fix, palace].filter(Boolean);
+    let solid = surfaces[0] || null;
+    if (surfaces.length > 1) {
+      solid = {
+        heightAt: (x, z) => Math.max(...surfaces.map(surface => surface.heightAt(x, z))),
+        groundHeightAt: (x, z) => Math.max(...surfaces.map(surface => (surface.groundHeightAt ?? surface.heightAt).call(surface, x, z))),
+        collide: (pos, radius, normal) => surfaces.some(surface => surface.collide?.(pos, radius, normal)),
+      };
+    }
     if (solid && (fix || !f.solid || f.solid === this._solid)) f.solid = this._solid = solid;
     // ...and what petals, dust and spray come down on: roofs as well as the land
     const env = g.fx.env;
@@ -152,7 +161,11 @@ export class Gameplay {
     }
     if (play && g.atlas) {
       const found = g.atlas.update(dt, L.landed && L.walk ? L.walk.pos : f.pos);
-      for (const landmark of found) if (landmark.kind === 'place') g.places.byId.get(landmark.id.slice(6)).visited = true;
+      for (const landmark of found) {
+        if (!landmark.id.startsWith('place:')) continue;
+        const place = g.places.byId.get(landmark.id.slice(6));
+        if (place) place.visited = true;
+      }
       if (found.length) g.toast?.(`发现 ${found.map((landmark) => landmark.name).join('、')} · 获得探索奖励`);
     }
     if (this.beacons) this.beacons.update(dt, f.pos, this.zone, g.atlas ? this.navigationTarget : this.courier.target, L.pad);

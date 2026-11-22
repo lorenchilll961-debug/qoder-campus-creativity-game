@@ -249,14 +249,14 @@ export class Beacons {
     let mark = 0;
     this.pads.forEach((p, i) => {
       const s = this.state[i], d = D[i];
-      const gold = p === (target?.pad || target);
-      const show = gold ? 1 - smooth01((d - BEACON.FAR) / 300) : p === hold || p === zone ? 1
+      const tracked = p === (target?.pad || target);
+      const show = tracked ? 1 - smooth01((d - BEACON.FAR) / 300) : p === hold || p === zone ? 1
         : (1 - smooth01((d - BEACON.SHOW) / BEACON.FADE)) * (1 - smooth01((d - cut) / 12));
       s.show = damp(s.show, show, 3, dt);
       s.zone = damp(s.zone, p === zone ? 1 : 0, p === zone ? 7 : 3.5, dt);
-      s.gold = damp(s.gold, gold ? 1 : 0, 2.5, dt);
+      s.gold = damp(s.gold, tracked || p.gold ? 1 : 0, 2.5, dt);
       L[i * 4] = s.show; L[i * 4 + 1] = s.zone; L[i * 4 + 2] = s.gold;
-      if (gold) { this.uMark.value.set(p.pos.x, p.pos.y, p.pos.z, s.show * s.gold); mark = 1; }
+      if (tracked) { this.uMark.value.set(p.pos.x, p.pos.y, p.pos.z, s.show * s.gold); mark = 1; }
     });
     if (!mark && target) {
       const distance = Math.hypot(target.pos.x - pos.x, target.pos.y - pos.y, target.pos.z - pos.z);
