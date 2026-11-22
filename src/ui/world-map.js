@@ -4,7 +4,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const side = (w, h) => Math.max(1, Math.min(w, h));
 const valid = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.z);
 const KINDS = { town: ['○', '城镇'], landing: ['■', '停靠平台'], place: ['◆', '探索地点'], pin: ['＋', '我的标记'] };
-const COLORS = { player: '#f5faf5', target: '#ffc979', pickup: '#94d7be', destination: '#dfc391', town: '#a9dfd4', landing: '#94d7be', place: '#c5cfaa', pin: '#ffc979' };
+const COLORS = { palace: '#ffd282', player: '#f5faf5', target: '#ffc979', pickup: '#94d7be', destination: '#dfc391', town: '#a9dfd4', landing: '#94d7be', place: '#c5cfaa', pin: '#ffc979' };
 const PIN_LIMIT = 12;
 const signed = n => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
 const stationHeight = station => `${station.spot || (station.street ? '地面门口' : '屋顶露台')}｜${station.street ? '地面高度' : '平台高度'} ${station.pos.y.toFixed(2)} 米（世界 Y）`;
@@ -64,16 +64,24 @@ export class WorldMap {
       <section class="wm-navigation" aria-label="当前导航"><div><span class="wm-eyebrow">◎ 导航目标</span><p class="wm-order" aria-live="polite"></p></div>
         <div class="wm-nav-actions"><button type="button" data-action="quest">返回订单</button><button type="button" data-action="stop">停止追踪</button></div></section>
       <div class="wm-layout"><section class="wm-chart" aria-label="地形航图">
-        <div class="wm-filters" role="group" aria-label="地图类别筛选">
-          <button type="button" data-filter="town" aria-pressed="true">○ 城镇</button><button type="button" data-filter="landing" aria-pressed="true">■ 停靠平台</button>
-          <button type="button" data-filter="place" aria-pressed="true">◆ 探索地点</button><button type="button" data-filter="pin" aria-pressed="true">＋ 我的标记</button></div>
+        <div class="wm-chart-controls">
+          <div class="wm-palace-actions" role="group" aria-label="故宫 · 秋英坡">
+            <button type="button" data-action="palace-focus">定位故宫</button>
+            <button type="button" data-action="palace">飞往故宫</button>
+          </div>
+          <div class="wm-filters" role="group" aria-label="地图类别筛选">
+            <button type="button" data-filter="town" aria-pressed="true">○ 城镇</button><button type="button" data-filter="landing" aria-pressed="true">■ 停靠平台</button>
+            <button type="button" data-filter="place" aria-pressed="true">◆ 探索地点</button><button type="button" data-filter="pin" aria-pressed="true">＋ 我的标记</button>
+          </div>
+          <p class="wm-palace-status" role="status" hidden></p>
+        </div>
         <div class="wm-surface"><canvas role="img" aria-label="真实地形航图，上北下南。可在右侧地点列表选择与追踪。"></canvas>
           <span class="wm-north" aria-hidden="true">↑<br>北 N</span><span class="wm-map-hint">暗色区域尚未探索</span><span class="wm-hover" hidden></span></div>
         <div class="wm-toolbar" role="group" aria-label="地图视图"><button type="button" data-action="all">全岛总览</button>
-          <button type="button" data-action="palace" hidden>飞往故宫</button><button type="button" data-action="route">查看航线</button><button type="button" data-action="player">回到玩家</button>
+          <button type="button" data-action="route">查看航线</button><button type="button" data-action="player">回到玩家</button>
           <div class="wm-zoom"><button type="button" data-action="out" aria-label="缩小地图">−</button><output aria-label="缩放倍数"></output>
           <button type="button" data-action="in" aria-label="放大地图">+</button></div></div>
-        <p class="wm-position"></p><p class="wm-position wm-palace-status" role="status" hidden></p></section>
+        <p class="wm-position"></p></section>
         <aside class="wm-sidebar" aria-label="地点与标记">
           <section class="wm-exploration"><div><h3>探索记录</h3><span class="wm-progress-text"></span></div><progress max="100" value="0" aria-label="全岛探索进度"></progress><p class="wm-discoveries"></p></section>
           <section class="wm-deliveries" aria-label="配送站点与随身订单">
@@ -191,7 +199,10 @@ export class WorldMap {
     return [this.game.flight.pos, this.target()?.pos, ...stops.map(p => p.pos)].filter(valid);
   }
   knownItems() { return [...this.atlas.landmarks.filter(p => this.atlas.isKnown(p)), ...this.atlas.pins]; }
-  visibleItems() { return this.knownItems().filter(p => this.atlas.filters[p.kind]); }
+  visibleItems() {
+    const palaceId = this.game.palace?.landmark.id;
+    return this.knownItems().filter(p => p.id === palaceId || this.atlas.filters[p.kind]);
+  }
   selected() {
     if (this.selection?.kind === 'station') return this.courier.stationById(this.selection.id);
     return this.visibleItems().find(p => p.id === this.selection?.id && (p.kind === 'pin' ? 'pin' : 'landmark') === this.selection.kind) || null;
@@ -212,11 +223,18 @@ export class WorldMap {
   }
   action(action) {
     if (action === 'close') this.close();
+    else if (action === 'palace-focus' && this.game.palace) {
+      const { collision, landmark } = this.game.palace;
+      this.selection = { kind: 'landmark', id: landmark.id };
+      this.draft = null;
+      this.addingPin = false;
+      this.setView(fitView([collision.bounds.min, collision.bounds.max], this.world, this.w, this.h));
+    }
     else if (action === 'palace') {
       if (this.game.switchPalace?.()) this.close();
       else {
         const message = this.dialog.querySelector('.wm-palace-status');
-        message.textContent = '请先返回游戏，按 G 起飞后再切换区域。';
+        message.textContent = '请等当前起飞或降落结束，再试一次。';
         message.hidden = false;
       }
     }
@@ -403,6 +421,18 @@ export class WorldMap {
     c.fillStyle = this.atlas.theme === 'light' ? '#394143' : '#171f21'; c.fillRect(0, 0, w, h);
     c.drawImage(this.thumbnail(), corner.x, corner.y, this.world * scale, this.world * scale);
     this.drawRiver(point, scale); this.drawRoads(point, scale); this.drawFog(corner, scale);
+    const palace = this.game.palace;
+    if (palace) {
+      const { min, max } = palace.collision.bounds;
+      const a = point(min), b = point(max);
+      c.fillStyle = '#b599683c';
+      c.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      c.strokeStyle = COLORS.palace;
+      c.lineWidth = Math.max(1, scale * 4);
+      c.beginPath();
+      c.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+      c.stroke();
+    }
     c.strokeStyle = '#c0e5df18'; c.lineWidth = 1;
     for (let i = -2; i <= 2; i++) {
       const p = point({ x: i * this.world / 4, z: i * this.world / 4 });
@@ -446,7 +476,7 @@ export class WorldMap {
       c.beginPath();
       if (kind === 'player') { c.rotate(this.game.flight.yaw || 0); c.moveTo(0, -10); c.lineTo(7, 7); c.lineTo(0, 3); c.lineTo(-7, 7); c.closePath(); }
       else if (kind === 'pickup' || kind === 'landing') c.rect(-5, -5, 10, 10);
-      else if (kind === 'destination' || kind === 'place') { c.moveTo(0, -7); c.lineTo(7, 0); c.lineTo(0, 7); c.lineTo(-7, 0); c.closePath(); }
+      else if (kind === 'destination' || kind === 'place' || kind === 'palace') { c.moveTo(0, -7); c.lineTo(7, 0); c.lineTo(0, 7); c.lineTo(-7, 0); c.closePath(); }
       else if (kind === 'pin') { c.moveTo(-6, 0); c.lineTo(6, 0); c.moveTo(0, -6); c.lineTo(0, 6); }
       else c.arc(0, 0, kind === 'target' ? 11 : 5, 0, Math.PI * 2);
       c.stroke();
@@ -461,8 +491,11 @@ export class WorldMap {
       }
       if (text) label(`${text}${off && edge ? '（图外）' : ''}`, x + 14, y - 12, COLORS[kind]);
     };
-    // Priority labels go first; filtered/undiscovered landmarks never reach the painter.
-    marker(target?.pos, 'target', `目标 · ${target?.name || '停靠点'}`, true);
+    // Draw the palace label before nearby town and delivery labels can take its space.
+    const palaceLandmark = palace?.landmark;
+    if (palaceLandmark) marker(palaceLandmark.pos, 'palace', '故宫 · 秋英坡', false,
+      this.selection?.kind === 'landmark' && this.selection.id === palaceLandmark.id);
+    marker(target?.pos, 'target', palaceLandmark && target?.id === palaceLandmark.id ? '' : `目标 · ${target?.name || '停靠点'}`, true);
     marker(player, 'player', '你在这里', true);
     const counts = this.destinationCounts();
     for (const station of this.courier.stations || []) {
@@ -471,6 +504,8 @@ export class WorldMap {
       if (count) marker(station.pos, 'destination', `收件点 · ${count} 单 · ${station.name}`, true, false, count);
     }
     for (const item of this.visibleItems()) {
+      if (item.id === palaceLandmark?.id || (palaceLandmark && item.pad &&
+          item.pos.x === palaceLandmark.pos.x && item.pos.z === palaceLandmark.pos.z)) continue;
       const selected = this.selection?.kind !== 'station' && this.selection?.id === item.id;
       const labelVisible = item.kind !== 'landing' || v.span < this.world / 3 || selected;
       marker(item.pos, item.kind, labelVisible && target?.pos !== item.pos ? item.name : '', false, selected);
@@ -499,10 +534,15 @@ export class WorldMap {
     q('[data-action="quest"]').disabled = !this.courier.target || atlas.tracking?.kind === 'quest';
     q('[data-action="stop"]').disabled = !atlas.tracking;
     q('[data-action="route"]').disabled = !target;
-    const palaceButton = q('[data-action="palace"]');
-    palaceButton.hidden = !this.game.palace;
-    if (this.game.palace) palaceButton.textContent = this.game.palace.collision.contains(player.x, player.z)
-      ? '返回海岛航线' : '飞往故宫';
+    const palace = this.game.palace, palaceButton = q('[data-action="palace"]');
+    q('[data-action="palace-focus"]').disabled = !palace;
+    palaceButton.disabled = !palace;
+    palaceButton.textContent = palace?.collision.contains(player.x, player.z) ? '返回海岛航线' : '飞往故宫';
+    if (!palace) {
+      const message = q('.wm-palace-status');
+      message.textContent = '故宫场景加载失败。请刷新游戏后重试。';
+      message.hidden = false;
+    }
     q('.wm-position').textContent = `玩家 X ${player.x.toFixed(1)} / Z ${player.z.toFixed(1)} · 高度 ${player.y.toFixed(2)} 米` +
       (target ? `｜目标 X ${target.pos.x.toFixed(1)} / Z ${target.pos.z.toFixed(1)} · 水平距离 ${Math.hypot(target.pos.x - player.x, target.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(target.pos.y - player.y)} 米` : '');
     q('.wm-progress-text').textContent = `${atlas.percent.toFixed(1)}%`;

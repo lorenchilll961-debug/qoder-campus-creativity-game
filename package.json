@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
-  "description": "花信风：电脑端二十四节气海岛探索游戏，魔毯飞行、法师步行与居民配送。Three.js，无构建步骤。",
+  "description": "花信风｜桌面端二十四节气海岛探索游戏。乘魔毯飞行、逛故宫市集、追踪双龙、与 NPC 交谈配送。Qoder 高校创造力大赛作品。",
   "scripts": {
     "start": "python3 tools/serve.py 6280",
     "gemini:test": "node --env-file-if-exists=.env.local tools/gemini-smoke.mjs"

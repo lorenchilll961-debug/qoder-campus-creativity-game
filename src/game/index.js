@@ -69,7 +69,7 @@ export class Gameplay {
     // Share the world collision with flight, landing, walking and effects.
     const island = town && typeof town.heightAt === 'function' ? town : null;
     const palace = g.palace?.collision;
-    const surfaces = [island, fix, palace].filter(Boolean);
+    const surfaces = [island, fix, palace, g.dragon?.field.collision].filter(Boolean);
     let solid = surfaces[0] || null;
     if (surfaces.length > 1) {
       solid = {

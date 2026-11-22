@@ -8,6 +8,7 @@ import { shared } from '../core/ctx.js';
 import { loadTracked } from '../core/progress.js';
 import { NOISE, NOISE_TEX, ATMOSPHERE, CLOUD_SHADOW, TERRAIN_LOOKUP, WIND, SHADOW, SEASON } from '../shaders/common.js';
 import { SKY_UNIFORMS } from './sky.js';
+import { palaceGradeAt, palacePavingAt } from './palace-site.js';
 
 const CELL = 48;
 
@@ -17,7 +18,9 @@ export class Props {
     const loader = new GLTFLoader();
     const loaded = await Promise.all(Object.keys(placements).map(async (name) => {
       const [gltf, info] = await Promise.all([loadTracked(loader, `${base}/models/${name}.glb`), fetch(`${base}/models/${name}.json`).then((r) => r.json())]);
-      return { name, gltf, info, list: placements[name] };
+      const list = placements[name].filter(([x, , z]) => !palacePavingAt(x, z))
+        .map(([x, y, z, yaw, scale]) => [x, palaceGradeAt(x, z, y), z, yaw, scale]);
+      return { name, gltf, info, list };
     }));
     return new Props(loaded);
   }

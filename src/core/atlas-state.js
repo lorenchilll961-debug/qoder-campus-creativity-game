@@ -8,6 +8,7 @@ const reward = (landmark) => landmark.kind === 'town' ? 10 : landmark.kind === '
 export function worldLandmarks(game) {
   return [
     ...(game.palace ? [game.palace.landmark] : []),
+    ...(game.dragon ? [game.dragon.landmark] : []),
     ...(game.terrain.meta.towns || []).map((town) => ({
       id: `town:${town.id}`, name: town.name, kind: 'town', hidden: false,
       description: '已标注聚落 · 飞近发现可获得 10 枚风铃币',
