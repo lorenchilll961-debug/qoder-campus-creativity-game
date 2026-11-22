@@ -35,12 +35,12 @@ export class Hud {
     e.job.classList.add('fresh');
   }
 
+  /** status is already the ready-to-show line (courier.statusText). */
   order(status, coins, objective) {
     const e = this.el;
-    if (e.jobStatus) e.jobStatus.textContent = { available: '新手委托 · 等待接单', active: '配送中 · 携带新焙春茶', completed: '新手委托 · 已完成' }[status];
+    if (e.jobStatus) e.jobStatus.textContent = status;
     if (e.jobObjective && e.jobObjective.textContent !== objective) e.jobObjective.textContent = objective;
     if (e.jobCoins) e.jobCoins.textContent = coins;
-    if (e.jobCompass) e.jobCompass.hidden = status === 'completed';
   }
 
   navigation(target, flight, kind) {

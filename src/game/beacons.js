@@ -249,7 +249,7 @@ export class Beacons {
     let mark = 0;
     this.pads.forEach((p, i) => {
       const s = this.state[i], d = D[i];
-      const gold = p === target;
+      const gold = p === (target?.pad || target);
       const show = gold ? 1 - smooth01((d - BEACON.FAR) / 300) : p === hold || p === zone ? 1
         : (1 - smooth01((d - BEACON.SHOW) / BEACON.FADE)) * (1 - smooth01((d - cut) / 12));
       s.show = damp(s.show, show, 3, dt);

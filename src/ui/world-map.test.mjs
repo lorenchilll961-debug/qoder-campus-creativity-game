@@ -127,8 +127,11 @@ function setup(t) {
       heightAt: (x, z) => { samples++; first ??= { x, z }; last = { x, z }; return x / 20 + z / 30; } },
     town: { buildings: [{ pos: [100, 30, -80], top: 50 }] } };
   const courier = { target: { name: '测试屋顶', spot: '塔顶平台', pos: { x: 100, y: 81.25, z: -80 } },
-    pickup: { pos: { x: -100, y: 5, z: 80 } }, quest: { status: 'active' }, opened: 0, mapOpened() { this.opened++; } };
-  courier.destination = courier.target;
+    stations: [{ id: 'guild', name: '信使公会', spot: '地面门口', street: true, pos: { x: -100, y: 5, z: 80 } }],
+    quest: { orders: [] },
+    stationById(id) { return this.stations.find(station => station.id === id) || null; },
+    trackStation(id) { const station = this.stationById(id); if (!station) return false; this.target = station; return true; },
+    statusText: '配送中 · 携带 1 单', opened: 0, mapOpened() { this.opened++; } };
   const town = { id: 'town:port', name: '云雀港', kind: 'town', hidden: false, description: '沿海聚落', pos: { x: 400, y: 36.5, z: 500 }, radius: 80 };
   const landing = { id: 'pad:roof', name: courier.target.name, kind: 'landing', hidden: false, description: '真正的塔顶平台', pos: courier.target.pos, pad: courier.target, radius: 60 };
   const secret = { id: 'place:secret', name: '不可泄露的秘境', kind: 'place', hidden: true, description: '尚未发现', pos: { x: -900, y: 90, z: 900 }, radius: 80 };
@@ -162,7 +165,7 @@ test('open renders current coordinates and exact roof height before notifying co
   assert.match(map.dialog.querySelector('.wm-position').textContent, /50\.25/);
   assert.equal(map.open(), false);
   const view = { x: 100, z: 50, span: 800 }; map.setView(view); map.close();
-  game.flight.pos.x = 123; courier.quest.status = 'completed';
+  game.flight.pos.x = 123; courier.statusText = '订单已完成';
   assert.equal(map.open(), true); assert.deepEqual(map.view, view);
   assert.match(map.dialog.querySelector('.wm-position').textContent, /玩家 X 123\.0/);
   assert.match(map.dialog.querySelector('.wm-order').textContent, /订单已完成/);
@@ -191,7 +194,7 @@ test('buttons, pointer capture, wheel anchor, zoom limits and drag cancellation 
   assert.ok(map.view.span < before);
   for (let i = 0; i < 30; i++) click('in'); assert.ok(map.dialog.querySelector('[data-action="in"]').disabled);
   click('all'); assert.ok(map.dialog.querySelector('[data-action="out"]').disabled);
-  courier.target = null; courier.pickup = null; courier.destination = null; map.render();
+  courier.target = null; courier.stations = []; map.render();
   assert.match(map.dialog.querySelector('.wm-order').textContent, /暂无当前目标/);
   click('close'); assert.equal(map.isOpen, false);
 });
@@ -266,6 +269,16 @@ const pointer = (map, event, x, y, overrides = {}) => map.canvas.fire(event, {
 });
 const tap = (map, p) => { pointer(map, 'pointerdown', p.x, p.y); pointer(map, 'pointerup', p.x, p.y); };
 const submitPin = map => map.dialog.querySelector('.wm-pin-editor').fire('submit', { preventDefault() {} });
+const activate = (map, button) => map.dialog.fire('click', { target: button });
+function deliveryStations(courier) {
+  courier.stations = Array.from({ length: 8 }, (_, i) => {
+    const street = i < 4, pos = { x: (i % 4 - 1.5) * 1000, y: street ? 4.125 + i : 140.375 + i, z: street ? -1200 : 1200 };
+    return { id: `station-${i}`, name: `楼 ${i} · 店员 ${i}`, spot: street ? '地面门口' : '屋顶露台', street, pos,
+      ...(street ? {} : { pad: { name: `平台 ${i}`, pos } }) };
+  });
+  courier.target = courier.stations[0];
+  return courier.stations;
+}
 
 test('inverse projection roundtrips arbitrary coordinates in landscape and portrait', () => {
   for (const [width, height] of [[1440, 900], [1024, 576], [360, 740], [1, 1]]) {
@@ -302,7 +315,7 @@ test('canvas selection and native button list share details, tracking and real p
   click(map, 'stop'); assert.equal(atlas.tracking, null);
   assert.equal(map.target(), null); assert.equal(map.dialog.querySelector('[data-action="stop"]').disabled, true);
   assert.equal(map.dialog.querySelector('[data-action="route"]').disabled, true);
-  assert.equal(courier.destination, courier.target); assert.equal(courier.quest.status, 'active');
+  assert.equal(courier.stations.length, 1); assert.equal(courier.statusText, '配送中 · 携带 1 单');
 });
 
 test('tracking another real pad reports platform height rather than sampled terrain height', t => {
@@ -337,14 +350,181 @@ test('filters affect symbols, hit testing and accessible list without revealing 
   tap(map, mapPoint(secret.pos, map.view, w, h)); assert.equal(map.selected(), secret);
 });
 
-test('completed delivery removes its obsolete route and stop labels without hiding public landmarks', t => {
+test('completed delivery removes obsolete orders and destinations but retains pickup stations and landmarks', t => {
   const { map, courier, game, town } = setup(t);
-  courier.quest.status = 'completed'; courier.target = null; map.open();
-  assert.deepEqual(map.routePoints(), [game.flight.pos]);
+  courier.quest.orders = [{ id: 'done', from: 'guild', to: 'guild', parcel: '旧包裹', reward: 20 }];
+  courier.target = courier.stations[0]; map.open();
+  assert.equal(map.dialog.querySelector('.wm-orders').nodes.length, 1);
+  activate(map, map.dialog.querySelector('.wm-orders').nodes[0]);
+  assert.match(map.dialog.querySelector('.wm-detail-description').textContent, /携带 1 单/);
+  courier.quest.orders = []; courier.target = null; courier.statusText = '订单已完成';
+  map.canvas.calls.length = 0; map.render();
+  assert.deepEqual(map.routePoints(), [game.flight.pos, ...courier.stations.map(station => station.pos)]);
   const painted = map.canvas.calls.filter(call => call[0] === 'fillText').map(call => call[1]);
-  assert.ok(!painted.some(label => /取件点|收件点/.test(label)));
+  assert.ok(!painted.some(label => /收件点|旧包裹/.test(label)));
+  assert.ok(painted.includes(`取件点 · ${courier.stations[0].name}`));
   assert.ok(painted.includes(town.name));
+  assert.equal(map.dialog.querySelector('.wm-orders').nodes.length, 0);
+  assert.equal(map.dialog.querySelector('.wm-orders-empty').hidden, false);
+  assert.equal(map.dialog.querySelector('.wm-order-count').textContent, '0 单');
+  assert.equal(map.dialog.querySelector('.wm-stations').nodes.length, 1);
+  assert.ok(!map.dialog.querySelector('.wm-stations').textContent.includes('待送'));
+  assert.doesNotMatch(map.dialog.querySelector('.wm-detail-kind').textContent, /待送/);
+  assert.doesNotMatch(map.dialog.querySelector('.wm-detail-description').textContent, /携带/);
   assert.equal(map.rows.length, 2);
+});
+
+test('all eight native station buttons select courier destinations through quest tracking without atlas hacks', t => {
+  const { map, courier, atlas, town } = setup(t), stations = deliveryStations(courier);
+  const landmarks = [...atlas.landmarks], pins = [...atlas.pins], cells = [...atlas.cells], discoveries = [...atlas.discovered];
+  const calls = [], trackStation = courier.trackStation, track = atlas.track;
+  courier.trackStation = id => { calls.push(['station', id]); return trackStation.call(courier, id); };
+  atlas.track = (kind, id) => { calls.push(['atlas', kind]); return track.call(atlas, kind, id); };
+  map.open(); map.select('landmark', town.id); click(map, 'track'); calls.length = 0;
+  const buttons = map.dialog.querySelector('.wm-stations').nodes;
+  assert.equal(buttons.length, 8);
+  assert.equal(map.dialog.querySelector('.wm-station-count').textContent, '8 处');
+  assert.equal(stations.filter(station => station.street).length, 4);
+  for (const [i, row] of buttons.entries()) {
+    assert.equal(row.tag, 'button'); assert.equal(row.type, 'button'); assert.equal(row.disabled, false);
+    row.focus(); activate(map, row);
+    assert.deepEqual(calls.splice(0), [['station', stations[i].id], ['atlas', 'quest']]);
+    assert.equal(courier.target, stations[i]); assert.equal(map.target(), stations[i]); assert.equal(map.selected(), stations[i]);
+    assert.deepEqual(atlas.tracking, { kind: 'quest' });
+    assert.equal(map.dialog.querySelector('.wm-stations').nodes[i], row); assert.ok(row.focused);
+    assert.equal(row.getAttribute('aria-pressed'), 'true');
+    assert.equal(buttons.filter(button => button.getAttribute('aria-pressed') === 'true').length, 1);
+    assert.equal(map.dialog.querySelector('.wm-detail-name').textContent, stations[i].name);
+    assert.equal(map.dialog.querySelector('[data-action="track"]').disabled, true);
+  }
+  click(map, 'stop'); assert.ok(buttons.every(row => row.getAttribute('aria-pressed') === 'false'));
+  click(map, 'track'); assert.equal(map.target(), stations[7]);
+  for (const kind of ['town', 'landing', 'place', 'pin']) filter(map, kind);
+  assert.equal(map.rows.length, 0); assert.equal(map.selected(), stations[7]); assert.equal(map.dialog.querySelector('.wm-stations').nodes.length, 8);
+  assert.deepEqual(atlas.landmarks, landmarks); assert.deepEqual(atlas.pins, pins);
+  assert.deepEqual([...atlas.cells], cells); assert.deepEqual([...atlas.discovered], discoveries);
+  assert.deepEqual(courier.quest.orders, []);
+});
+
+test('every carried order remains inspectable and selectable with counts for multiple pending destinations', t => {
+  const { map, courier, atlas } = setup(t), stations = deliveryStations(courier);
+  courier.quest.orders = Array.from({ length: 137 }, (_, i) => ({ id: `order-${i}`, from: stations[0].id,
+    to: stations[1 + i % 3].id, parcel: `包裹 ${i}`, reward: 10 + i }));
+  const orders = structuredClone(courier.quest.orders);
+  map.open();
+  const rows = map.dialog.querySelector('.wm-orders').nodes;
+  assert.equal(rows.length, 137); assert.equal(map.dialog.querySelector('.wm-order-count').textContent, '137 单');
+  assert.equal(map.dialog.querySelector('.wm-orders-empty').hidden, true);
+  for (const [i, row] of rows.entries()) {
+    assert.equal(row.tag, 'button'); assert.equal(row.type, 'button');
+    assert.ok(row.textContent.includes(orders[i].parcel)); assert.ok(row.textContent.includes(orders[i].id));
+    assert.ok(row.textContent.includes(`${orders[i].reward} 风铃币`)); assert.ok(row.textContent.includes(stations[0].name));
+    assert.ok(row.textContent.includes(courier.stationById(orders[i].to).name));
+  }
+  for (const index of [0, 1, 136]) {
+    const row = rows[index]; row.focus(); activate(map, row);
+    assert.equal(courier.target.id, orders[index].to); assert.equal(map.target(), courier.stationById(orders[index].to));
+    assert.deepEqual(atlas.tracking, { kind: 'quest' }); assert.equal(row.getAttribute('aria-pressed'), 'true');
+    assert.equal(map.dialog.querySelector('.wm-orders').nodes[index], row); assert.ok(row.focused);
+  }
+  assert.deepEqual(courier.quest.orders, orders);
+  assert.deepEqual([...map.destinationCounts()], [[stations[1].id, 46], [stations[2].id, 46], [stations[3].id, 45]]);
+  map.canvas.calls.length = 0; map.draw();
+  const painted = () => map.canvas.calls.filter(call => call[0] === 'fillText').map(call => call[1]);
+  assert.equal(painted().filter(text => text === '46').length, 2); assert.ok(painted().includes('45'));
+  assert.equal(map.canvas.calls.filter(call => call[0] === 'rect' && call[1] === -5).length, 9);
+  assert.equal(map.canvas.calls.filter(call => call[0] === 'moveTo' && call[1] === 0 && call[2] === -7).length, 3);
+  assert.match(map.dialog.querySelector('.wm-stations').nodes[1].textContent, /待送 46 单/);
+  courier.quest.orders = courier.quest.orders.filter(order => order.to !== stations[1].id);
+  map.canvas.calls.length = 0; map.render();
+  assert.equal(map.dialog.querySelector('.wm-orders').nodes.length, 91);
+  assert.equal(map.dialog.querySelector('.wm-order-count').textContent, '91 单');
+  assert.ok(map.dialog.querySelector('.wm-orders').nodes.every(row => row.dataset.stationId !== stations[1].id));
+  assert.ok(!map.dialog.querySelector('.wm-stations').nodes[1].textContent.includes('待送'));
+  assert.equal(painted().filter(text => text === '46').length, 1);
+  assert.ok(painted().some(text => text.startsWith(`取件点 · ${stations[1].name}`)));
+  assert.equal(map.canvas.calls.filter(call => call[0] === 'moveTo' && call[1] === 0 && call[2] === -7).length, 2);
+});
+
+test('order, station and place counters stay independent when they share badge styling', t => {
+  const { map, courier } = setup(t), stations = deliveryStations(courier);
+  courier.quest.orders = [{ id: 'parcel-1', from: stations[0].id, to: stations[1].id, parcel: '春茶', reward: 20 }];
+  map.dialog.children.set('.wm-count', map.dialog.querySelector('.wm-order-count'));
+  map.open();
+  assert.equal(map.dialog.querySelector('.wm-order-count').textContent, '1 单');
+  assert.equal(map.dialog.querySelector('.wm-station-count').textContent, '8 处');
+  assert.equal(map.dialog.querySelector('.wm-list-heading .wm-count').textContent, String(map.rows.length));
+  filter(map, 'town');
+  assert.equal(map.dialog.querySelector('.wm-order-count').textContent, '1 单');
+  assert.equal(map.dialog.querySelector('.wm-list-heading .wm-count').textContent, String(map.rows.length));
+});
+
+test('station and order selection report exact ground or roof Y with safe arrival guidance', t => {
+  const { map, courier, samples } = setup(t), stations = deliveryStations(courier);
+  courier.quest.orders = [{ id: 'ground', from: stations[4].id, to: stations[0].id, parcel: '地面包裹', reward: 35 }];
+  map.open(); const before = samples();
+  activate(map, map.dialog.querySelector('.wm-orders').nodes[0]);
+  assert.match(map.dialog.querySelector('.wm-order').textContent, /地面门口｜地面高度 4\.13 米（世界 Y）/);
+  assert.match(map.dialog.querySelector('.wm-order').textContent, /G 降落.*步行/);
+  assert.doesNotMatch(map.dialog.querySelector('.wm-order').textContent, /平台高度|对准平台|勿降至下方地面/);
+  assert.match(map.dialog.querySelector('.wm-detail-coordinates').textContent, /地面高度 4\.13/);
+  assert.match(map.dialog.querySelector('.wm-detail-warning').textContent, /G 降落.*步行/);
+  assert.match(map.dialog.querySelector('.wm-position').textContent, /高差 -26\.88/);
+  activate(map, map.dialog.querySelector('.wm-stations').nodes[4]);
+  assert.equal(map.target(), stations[4]); assert.notEqual(map.target(), stations[4].pad);
+  assert.match(map.dialog.querySelector('.wm-order').textContent, /屋顶露台｜平台高度 144\.38/);
+  assert.match(map.dialog.querySelector('.wm-order').textContent, /对准平台，勿降至下方地面/);
+  assert.match(map.dialog.querySelector('.wm-detail-coordinates').textContent, /平台高度 144\.38/);
+  assert.match(map.dialog.querySelector('.wm-position').textContent, /高差 \+113\.38/);
+  click(map, 'focus'); near(map.view.x, stations[4].pos.x); near(map.view.z, stations[4].pos.z);
+  assert.equal(samples(), before);
+});
+
+test('station canvas hits and hover use station navigation without disclosing unknown landmarks or accepting fake probes', t => {
+  const { map, courier, atlas, secret } = setup(t), stations = deliveryStations(courier);
+  map.open();
+  const p = mapPoint(stations[0].pos, map.view, w, h);
+  pointer(map, 'pointermove', p.x, p.y);
+  assert.match(map.dialog.querySelector('.wm-hover').textContent, /取件点.*地面高度 4\.13/);
+  tap(map, p); assert.equal(map.selected(), stations[0]); assert.equal(map.target(), stations[0]);
+  const target = courier.target;
+  for (const id of ['fake-probe', secret.id]) {
+    const probe = new Element('button'); probe.dataset.stationId = id; activate(map, probe);
+    assert.equal(courier.target, target); assert.deepEqual(atlas.tracking, { kind: 'quest' });
+    map.select('landmark', id); click(map, 'track');
+    assert.equal(map.selected(), null); assert.equal(courier.target, target); assert.deepEqual(atlas.tracking, { kind: 'quest' });
+  }
+  assert.equal(map.hitTest(mapPoint(secret.pos, map.view, w, h)), undefined);
+  assert.equal(atlas.discovered.size, 0); assert.equal(atlas.pins.length, 0);
+  assert.ok(!map.canvas.calls.some(call => call[0] === 'fillText' && String(call[1]).includes(secret.name)));
+  courier.quest.orders = [{ id: 'unavailable', from: stations[0].id, to: 'missing', parcel: '暂存包裹', reward: 12 }];
+  map.render(); const row = map.dialog.querySelector('.wm-orders').nodes[0];
+  assert.equal(row.disabled, true); assert.match(row.textContent, /收件站点不可用/);
+  activate(map, row); assert.equal(courier.target, target);
+});
+
+test('station names, spots, order fields and status are rendered as text, never HTML', t => {
+  const { map, courier } = setup(t), stations = deliveryStations(courier);
+  const unsafe = '<img src=x onerror=alert(1)>';
+  stations[0].id = `pickup-${unsafe}`; stations[0].name = `来源 ${unsafe}`;
+  stations[4].name = `目的地 ${unsafe}`; stations[4].spot = `屋顶露台 ${unsafe}`;
+  courier.statusText = `状态 ${unsafe}`;
+  courier.quest.orders = [{ id: `order-${unsafe}`, from: stations[0].id, to: stations[4].id, parcel: `包裹 ${unsafe}`, reward: 22 }];
+  map.open();
+  const order = map.dialog.querySelector('.wm-orders').nodes[0], station = map.dialog.querySelector('.wm-stations').nodes[0];
+  assert.ok(order.textContent.includes(courier.quest.orders[0].id));
+  assert.ok(order.textContent.includes(courier.quest.orders[0].parcel));
+  assert.ok(order.textContent.includes(stations[0].name)); assert.ok(order.textContent.includes(stations[4].name));
+  assert.ok(order.textContent.includes(stations[4].spot));
+  for (const row of map.deliveryRows) for (const node of [row, ...row.nodes]) assert.equal(node.innerHTML, undefined);
+  activate(map, station); assert.equal(courier.target, stations[0]);
+  activate(map, order);
+  assert.equal(map.dialog.querySelector('.wm-detail-name').textContent, stations[4].name);
+  assert.ok(map.dialog.querySelector('.wm-order').textContent.includes(courier.statusText));
+  assert.equal(map.dialog.querySelector('.wm-order').innerHTML, undefined);
+  pointer(map, 'pointermove', ...Object.values(mapPoint(stations[4].pos, map.view, w, h)));
+  assert.ok(map.dialog.querySelector('.wm-hover').textContent.includes(unsafe));
+  assert.equal(map.dialog.querySelector('.wm-hover').innerHTML, undefined);
 });
 
 test('overview avoids platform label clutter while town labels and closer platform labels remain', t => {

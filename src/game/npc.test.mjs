@@ -11,7 +11,7 @@ registerHooks({ resolve(specifier, context, next) {
 const THREE = await import('three');
 const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
 const { clone } = await import('three/addons/utils/SkeletonUtils.js');
-const { RESIDENTS, Resident, DeliveryNPCs, patrolRoute } = await import('./npc.js');
+const { RESIDENTS, Resident, DeliveryNPCs, patrolRoute, stationFor } = await import('./npc.js');
 const { WALK, probeGround, moveGround } = await import('./ground.js');
 const { Courier } = await import('./courier.js');
 const { FIRST_ORDER } = await import('./quest.js');
@@ -107,13 +107,31 @@ function actorStub(pad = padAt(), pos = new THREE.Vector3(2, 10, 0), role = 'sho
     mixer: { update: (dt) => { calls.time += dt; } }, update: (...args) => calls.updates.push(args) };
 }
 
-test('resident roles use the three local Quaternius models and fixed delivery IDs', () => {
-  assert.deepEqual(RESIDENTS.map(({ role, model }) => [role, model]), [
-    ['shopkeeper', 'Formal.glb'], ['villager', 'Farmer.glb'], ['wizard', 'Witch.glb'],
-  ]);
-  assert.equal(RESIDENTS[0].padId, FIRST_ORDER.pickup);
-  assert.equal(RESIDENTS[1].padId, FIRST_ORDER.destination);
-  assert.equal(RESIDENTS[2].padId, 'larkhaven:c_observatory:0:0');
+test('stations are half street level and half rooftop, all on real larkhaven pads', () => {
+  const town = JSON.parse(readFileSync(new URL('../../assets/town/larkhaven.json', import.meta.url)));
+  const pads = new Set(town.pads.map((p) => p.id));
+  for (const spec of RESIDENTS) assert.ok(pads.has(spec.padId), `${spec.name} 站点 ${spec.padId} 不在云雀港`);
+  const stations = RESIDENTS.filter((spec) => spec.station !== false);
+  assert.equal(stations.length, 8);
+  assert.equal(stations.filter((spec) => spec.ground).length, 4);
+  assert.equal(new Set(stations.map((spec) => spec.id)).size, 8);
+  const wizard = RESIDENTS.find((spec) => spec.station === false);
+  assert.equal(wizard.role, 'wizard');
+  assert.deepEqual([...new Set(stations.map((spec) => spec.model))].sort(), ['Farmer.glb', 'Formal.glb', 'Witch.glb']);
+});
+
+test('stationFor anchors street stations on the ground and rooftop ones on the pad itself', () => {
+  const env = { terrain: { heightAt: () => 4.5 }, solid: { heightAt: (x) => x < 0 ? 20 : -1e9 } };
+  const pad = padAt(RESIDENTS[0].padId, 5, 18, 0);
+  const roof = stationFor(env, pad, RESIDENTS[0]);
+  assert.equal(roof.id, 'guild'); assert.equal(roof.pad, pad); assert.equal(roof.pos, pad.pos);
+  const door = stationFor(env, pad, RESIDENTS[1]);
+  assert.equal(door.id, 'teahouse'); assert.equal(door.street, true); assert.equal(door.pad, undefined);
+  assert.deepEqual([door.pos.x, door.pos.y, door.pos.z].map((v) => +v.toFixed(3)), [5, 4.5, 5]);
+  // a probe that hits the building instead of the street leaves the station unplaced
+  assert.equal(stationFor(env, pad, { ...RESIDENTS[1], ground: [-10, 0] }), null);
+  assert.equal(stationFor(env, null, RESIDENTS[0]), null);
+  assert.equal(stationFor(env, pad, { ...RESIDENTS[0], station: false }), null);
 });
 
 for (const spec of RESIDENTS) {
@@ -473,7 +491,7 @@ for (const missing of ['model', 'Idle', 'Walk']) {
     const npcs = new DeliveryNPCs(game);
     npcs.setPads(RESIDENTS.map((spec) => padAt(spec.padId)));
     await npcs.ready;
-    assert.equal(errors.length, 3); assert.equal(toasts.length, 3);
+    assert.equal(errors.length, 9); assert.equal(toasts.length, 9);
     assert.equal(npcs.actors.length, 0); assert.equal(npcs.group.children.length, 0);
     assert.equal(npcs.nearby(), null);
     for (const pad of npcs.pads) {
@@ -484,6 +502,30 @@ for (const missing of ['model', 'Idle', 'Walk']) {
     if (missing !== 'model') assert.ok(errors.every((args) => args.at(-1).message.includes(missing)));
   });
 }
+
+test('async model loading publishes eight bound stations and preserves the wizard', async (t) => {
+  const gltf = await source(RESIDENTS[0]);
+  t.mock.method(GLTFLoader.prototype, 'loadAsync', async () => ({ scene: clone(gltf.scene), animations: gltf.animations }));
+  t.mock.method(DeliveryNPCs.prototype, 'addLabel', () => {});
+  const game = { pipeline: { overlay: new THREE.Group() }, flight: flat() };
+  const npcs = new DeliveryNPCs(game);
+  const pads = RESIDENTS.map((spec, i) => padAt(spec.padId, i * 20));
+  npcs.setPads(pads);
+  assert.equal(npcs.stations.length, 0);
+  await npcs.ready;
+  assert.equal(npcs.stations.length, 8);
+  assert.equal(npcs.stations.filter((s) => s.street).length, 4);
+  assert.ok(npcs.actors.every((a) => a.active));
+  for (const station of npcs.stations) assert.equal(npcs.actorFor(station).pad, station);
+  assert.equal(npcs.actors.find((a) => a.spec.role === 'wizard').pad, pads.at(-1));
+  npcs.setPads([]);
+  assert.deepEqual(npcs.stations, []);
+  assert.ok(npcs.actors.every((a) => !a.active));
+});
+
+test('roof patrol cannot silently relocate the resident to a lower floor', () => {
+  assert.equal(patrolRoute(flat(4), padAt(), [[-1, 0], [1, 0]]), null);
+});
 
 test('reach uses the actual actor instead of a nearby stale pad, in either direction', () => {
   const pad = freeze(padAt()), actor = actorStub(pad, new THREE.Vector3(10, 10, 0));
@@ -499,6 +541,7 @@ for (const [name, change] of [
   ['different floor above', ({ actor }) => { actor.pos.y = 11.21; }],
   ['different floor below', ({ actor }) => { actor.pos.y = 8.79; }],
   ['airborne/unlanded', ({ landing }) => { landing.landed = false; }],
+  ['mid-jump', ({ landing }) => { landing.walk.jump = { on: true }; }],
   ['inactive actor', ({ actor }) => { actor.active = false; }],
   ['unloaded actor', ({ npcs }) => { npcs.actors = []; }],
 ]) {
@@ -579,60 +622,95 @@ test('manager update passes real reach to actors and setPads clears stale dialog
   npcs.actors = [real]; npcs.talking = real;
   const pad = padAt(real.spec.padId, 20);
   npcs.setPads([pad]);
-  assert.equal(npcs.talking, null); assert.equal(real.pad, pad); assert.equal(real.active, true);
+  assert.equal(npcs.talking, null); assert.equal(real.pad.pad, pad); assert.equal(real.active, true);
+  assert.equal(npcs.stations[0], real.pad);
   npcs.setPads([]);
   assert.equal(real.active, false); assert.equal(npcs.actorFor(pad), undefined); assert.equal(npcs.nearby(), null);
 });
 
 function courierFixture() {
-  const pickup = padAt(FIRST_ORDER.pickup), destination = padAt(FIRST_ORDER.destination, 90), wizard = padAt(RESIDENTS[2].padId, 180);
-  const actors = [actorStub(pickup, new THREE.Vector3(0, 10, 0)), actorStub(destination, new THREE.Vector3(90, 10, 0), 'villager'), actorStub(wizard, new THREE.Vector3(180, 10, 0), 'wizard')];
+  const guild = { id: 'guild', name: '阿岚 · 商店老板', pad: padAt(RESIDENTS[0].padId), pos: { x: 0, y: 10, z: 0 } };
+  const teahouse = { id: 'teahouse', name: '老林 · 村民', pad: padAt(RESIDENTS[1].padId, 90), pos: { x: 90, y: 10, z: 0 } };
+  const wizardPad = padAt(RESIDENTS.find((spec) => spec.station === false).padId, 180);
+  const actors = [actorStub(guild, new THREE.Vector3(0, 10, 0)), actorStub(teahouse, new THREE.Vector3(90, 10, 0)), actorStub(wizardPad, new THREE.Vector3(180, 10, 0), 'wizard')];
   const fixture = manager(actors), messages = [], writes = [], cards = [];
   const store = { get: (key, fallback) => fallback, set: (key, value) => writes.push({ key, value: structuredClone(value) }) };
   Object.assign(fixture.game, { fx: { sprites: { spawn() {} }, burst() {} }, rider: { sunVis: 1 } });
   const hud = { job() {}, jobAt() {}, order() {}, navigation() {}, card: (...args) => cards.push(args) };
   const courier = new Courier(fixture.game, store, hud);
-  courier.setPads([pickup, destination, wizard]);
+  courier.setPads([guild.pad, teahouse.pad, wizardPad]);
   courier.npcs = fixture.npcs;
+  fixture.npcs.stations = [guild, teahouse];
   courier.dialogue = { show: (...args) => { messages.push(args); return true; } };
   function movePlayer(x, y = 10) { fixture.landing.walk.pos.set(x, y, 0); fixture.flight.pos.set(x, y + 0.82, 0); }
-  return { ...fixture, actors, courier, pickup, destination, wizard, messages, writes, cards, movePlayer };
+  return { ...fixture, actors, courier, guild, teahouse, wizard: wizardPad, messages, writes, cards, movePlayer };
 }
 
 test('wizard dialogue never offers/accepts/delivers an order or changes progress/rewards', () => {
   const { courier, wizard, movePlayer, messages, writes, actors, npcs } = courierFixture();
   movePlayer(180);
-  for (const status of ['available', 'active', 'completed']) {
-    courier.quest.status = status;
-    const before = JSON.stringify({ status, progress: courier.quest.progress, coins: courier.quest.coins });
-    assert.equal(courier.interact(), true);
-    assert.equal(messages.at(-1)[0], actors[2].spec.name);
-    assert.equal(messages.at(-1)[2], undefined, 'wizard must not offer an order action');
-    assert.equal(courier.accept(wizard), false); assert.equal(courier.deliver(wizard), false);
-    assert.equal(JSON.stringify({ status: courier.quest.status, progress: courier.quest.progress, coins: courier.quest.coins }), before);
-    assert.equal(npcs.talking, actors[2]);
-  }
+  courier.quest.orders.push({ id: 'held', from: 'guild', to: 'teahouse', parcel: '一坛桂花米酒', reward: 20 });
+  const before = JSON.stringify({ orders: courier.quest.orders.length, progress: courier.quest.progress, coins: courier.quest.coins });
+  assert.equal(courier.interact(), true);
+  assert.equal(messages.at(-1)[0], actors[2].spec.name);
+  assert.equal(messages.at(-1)[2], undefined, 'wizard must not offer an order action');
+  assert.equal(courier.accept(wizard), false); assert.equal(courier.deliver(wizard), false);
+  assert.equal(JSON.stringify({ orders: courier.quest.orders.length, progress: courier.quest.progress, coins: courier.quest.coins }), before);
+  assert.equal(npcs.talking, actors[2]);
   assert.deepEqual(writes, []);
 });
 
 test('Courier accepts near a moved shopkeeper, not its stale pad; missing actor cannot accept', () => {
-  const { courier, pickup, actors, movePlayer } = courierFixture();
+  const { courier, guild, actors, movePlayer } = courierFixture();
   actors[0].pos.x = 12;
-  assert.equal(courier.accept(pickup), false);
-  movePlayer(12); actors[0].active = false;
-  assert.equal(courier.accept(pickup), false);
+  const offer = courier.offerFor(guild);
+  assert.equal(offer.id, FIRST_ORDER.id);
+  movePlayer(0);
+  assert.equal(courier.accept(offer), false, 'the resident is 12 m away');
+  movePlayer(12);
+  actors[0].active = false;
+  assert.equal(courier.accept(offer), false);
   actors[0].active = true;
   assert.equal(courier.interact(), true);
-  assert.equal(courier.accept(pickup), true);
-  assert.equal(courier.quest.status, 'active'); assert.equal(pickup.pos.x, 0);
+  assert.equal(courier.accept(offer), true);
+  assert.equal(courier.quest.carrying, true); assert.equal(guild.pad.pos.x, 0);
+});
+
+test('multiple dialogue orders keep independent navigation and can return to any pickup', () => {
+  const { courier, guild, teahouse, messages, movePlayer } = courierFixture();
+  for (let i = 0; i < 5; i++) {
+    assert.equal(courier.interact(), true);
+    const actions = messages.at(-1)[2];
+    assert.equal(actions.find((a) => a.label.startsWith('接下')).run(), true);
+  }
+  assert.equal(courier.quest.orders.length, 5);
+  assert.equal(courier.target, teahouse);
+  assert.equal(courier.trackStation('missing'), false);
+  assert.equal(courier.trackStation(guild.id), true);
+  assert.equal(courier.target, guild);
+  assert.match(courier.objective(), /接单/);
+  assert.equal(courier.trackStation(teahouse.id), true);
+  movePlayer(90);
+  courier.quest.learn('fly');
+  assert.equal(courier.deliver(teahouse), true);
+  assert.equal(courier.quest.orders.length, 0);
+  assert.equal(courier.target, null);
+  assert.equal(courier.trackStation(guild.id), true);
+  assert.equal(courier.target, guild);
+  movePlayer(0);
+  const offer = courier.offerFor(guild);
+  assert.notEqual(offer.id, FIRST_ORDER.id);
+  assert.equal(courier.accept(offer), true);
+  assert.equal(courier.target, teahouse);
 });
 
 test('Courier delivery and stale dialogue callbacks recheck the moved recipient distance', () => {
-  const { courier, pickup, destination, actors, movePlayer, messages, flight } = courierFixture();
-  assert.equal(courier.accept(pickup), true); courier.quest.learn('fly');
+  const { courier, guild, teahouse, actors, movePlayer, messages, flight } = courierFixture();
+  const offer = courier.offerFor(guild);
+  assert.equal(courier.accept(offer), true); courier.quest.learn('fly');
   actors[1].pos.x = 100;
   movePlayer(90);
-  assert.equal(courier.deliver(destination), false);
+  assert.equal(courier.deliver(teahouse), false);
   movePlayer(100);
   assert.equal(courier.interact(), true);
   const confirm = messages.at(-1)[2][0].run;
@@ -642,13 +720,13 @@ test('Courier delivery and stale dialogue callbacks recheck the moved recipient 
   movePlayer(108);
   assert.equal(confirm(), true); assert.equal(courier.quest.coins, FIRST_ORDER.reward);
   assert.equal(courier.count, 1); assert.equal(flight.gust, 1);
-  assert.equal(confirm(), false); assert.equal(destination.pos.x, 90);
+  assert.equal(confirm(), false); assert.equal(teahouse.pos.x, 90);
 });
 
 for (const reason of ['airborne', 'wrong floor', 'wall', 'unloaded', 'paused']) {
   test(`Courier blocks interaction when ${reason}`, () => {
-    const f = courierFixture(), { courier, pickup, destination, movePlayer, landing, game, npcs } = f;
-    assert.equal(courier.accept(pickup), true); courier.quest.learn('fly'); movePlayer(92);
+    const f = courierFixture(), { courier, guild, teahouse, movePlayer, landing, game, npcs } = f;
+    assert.equal(courier.accept(courier.offerFor(guild)), true); courier.quest.learn('fly'); movePlayer(92);
     if (reason === 'airborne') landing.landed = false;
     if (reason === 'wrong floor') movePlayer(92, 6);
     if (reason === 'wall') game.flight.solid = { heightAt: (x) => Math.abs(x - 91) < 0.11 ? 20 : -Infinity };
@@ -656,7 +734,7 @@ for (const reason of ['airborne', 'wrong floor', 'wall', 'unloaded', 'paused']) 
     if (reason === 'paused') game.paused = true;
     assert.equal(courier.interact(), false);
     if (reason !== 'paused') {
-      assert.equal(courier.deliver(destination), false);
+      assert.equal(courier.deliver(teahouse), false);
       assert.equal(courier.quest.coins, 0);
     }
   });

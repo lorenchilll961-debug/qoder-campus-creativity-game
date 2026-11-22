@@ -1,17 +1,33 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadTracked } from '../core/progress.js';
-import { FIRST_ORDER, atCounter } from './quest.js';
+import { atCounter } from './quest.js';
 import { probeGround, moveGround, bodyClear, WALK } from './ground.js';
 
 export const RESIDENTS = Object.freeze([
-  { role: 'shopkeeper', padId: FIRST_ORDER.pickup, name: FIRST_ORDER.sender, model: 'Formal.glb', route: [[-2.4, 0.35], [2.4, 0.35]], speed: 0.85 },
-  { role: 'villager', padId: FIRST_ORDER.destination, name: FIRST_ORDER.recipient, model: 'Farmer.glb', route: [[-1.6, -0.7], [1.6, -0.7]], speed: 1 },
-  { role: 'wizard', padId: 'larkhaven:c_observatory:0:0', name: '白榆 · 魔法师', model: 'Witch.glb', route: [[-1.2, 0.6], [1.2, 0.6]], speed: 0.75 },
+  { id: 'guild', padId: 'larkhaven:m_couriers:7:0', name: '阿岚 · 商店老板', model: 'Formal.glb', route: [[-2.4, 0.35], [2.4, 0.35]], speed: 0.85 },
+  { id: 'teahouse', ground: [0, 5], padId: 'larkhaven:m_teahouse:48:0', name: '老林 · 村民', model: 'Farmer.glb', route: [[-1.6, -0.7], [1.6, -0.7]], speed: 1 },
+  { id: 'harbourmaster', padId: 'larkhaven:h_harbourmaster:13:0', name: '港务长 · 白鹣', model: 'Formal.glb', route: [[-1.2, 0], [1.2, 0]], speed: 0.8 },
+  { id: 'oldkeep', padId: 'larkhaven:c_oldkeep:87:0', name: '客栈掌柜 · 芦花', model: 'Farmer.glb', route: [[-0.8, 0], [0.8, 0]], speed: 0.9 },
+  { id: 'library', padId: 'larkhaven:c_library:92:0', name: '学者 · 青简', model: 'Witch.glb', route: [[-0.4, 0], [0.4, 0]], speed: 0.75 },
+  { id: 'customs', ground: [0, 7], padId: 'larkhaven:h_customs:20:0', name: '关员 · 严霜', model: 'Formal.glb', route: [[-1.6, 0.3], [1.6, 0.3]], speed: 0.85 },
+  { id: 'dryingtower', ground: [3.5, -3.5], padId: 'larkhaven:k_dryingtower:74:0', name: '染匠 · 靛青', model: 'Farmer.glb', route: [[-1.5, 0.4], [1.5, 0.4]], speed: 0.9 },
+  { id: 'belltower', ground: [10, 0], padId: 'larkhaven:m_belltower:11:0', name: '执事 · 檀香', model: 'Formal.glb', route: [[-1.5, 0.5], [1.5, 0.5]], speed: 0.8 },
+  { role: 'wizard', station: false, padId: 'larkhaven:c_observatory:0:0', name: '白榆 · 魔法师', model: 'Witch.glb', route: [[-1.2, 0.6], [1.2, 0.6]], speed: 0.75 },
 ]);
 
+export function stationFor(env, pad, spec) {
+  if (!pad || spec.station === false) return null;
+  const station = { id: spec.id, name: `${pad.name} · ${spec.name}`, town: pad.town,
+    street: !!spec.ground, spot: spec.ground ? '地面门口' : '屋顶露台' };
+  if (!spec.ground) return { ...station, pad, pos: pad.pos };
+  const x = pad.pos.x + spec.ground[0], z = pad.pos.z + spec.ground[1];
+  const spot = probeGround(env, x, z, { maxY: env.terrain.heightAt(x, z) + WALK.step });
+  return spot.ok ? { ...station, pos: spot.pos } : null;
+}
+
 export function patrolRoute(env, pad, offsets) {
-  const points = offsets.map(([x, z]) => probeGround(env, pad.pos.x + x, pad.pos.z + z, { maxY: pad.pos.y + WALK.step }));
+  const points = offsets.map(([x, z]) => probeGround(env, pad.pos.x + x, pad.pos.z + z, { referenceY: pad.pos.y, maxY: pad.pos.y + WALK.step }));
   if (points.some((p) => !p.ok)) return null;
   const route = points.map((p) => p.pos);
   for (let i = 0; i < route.length; i++) {
@@ -118,6 +134,7 @@ export class DeliveryNPCs {
     game.pipeline.overlay.add(this.group);
     this.actors = [];
     this.pads = [];
+    this.stations = [];
     this.talking = null;
     const loader = new GLTFLoader();
     this.ready = Promise.all(RESIDENTS.map(async (spec) => {
@@ -126,12 +143,14 @@ export class DeliveryNPCs {
         this.addLabel(actor);
         this.group.add(actor.group);
         this.actors.push(actor);
-        actor.bind(game.flight, this.pads.find((p) => p.id === spec.padId));
       } catch (error) {
         console.error('居民模型加载失败', spec.model, error);
         game.toast?.('居民模型加载失败，请刷新后重试');
       }
-    }));
+    })).then(() => {
+      this.actors.sort((a, b) => RESIDENTS.indexOf(a.spec) - RESIDENTS.indexOf(b.spec));
+      this.setPads(this.pads);
+    });
   }
 
   addLabel(actor) {
@@ -151,8 +170,15 @@ export class DeliveryNPCs {
 
   setPads(pads) {
     this.pads = pads;
+    this.stations = [];
     this.talking = null;
-    for (const actor of this.actors) actor.bind(this.game.flight, pads.find((p) => p.id === actor.spec.padId));
+    const env = this.game.flight;
+    for (const actor of this.actors) {
+      const pad = pads.find((p) => p.id === actor.spec.padId) || null;
+      const anchor = actor.spec.station === false ? pad : stationFor(env, pad, actor.spec);
+      actor.bind(env, anchor);
+      if (actor.spec.station !== false && actor.active) this.stations.push(anchor);
+    }
   }
 
   actorFor(pad) { return this.actors.find((a) => a.active && a.pad === pad); }

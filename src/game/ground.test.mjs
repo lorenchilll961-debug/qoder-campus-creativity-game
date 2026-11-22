@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WALK, JUMP, probeGround, moveGround, moveJump, groundAnchor, walkVector, bodyClear, airClear } from './ground.js';
+import { WALK, JUMP, probeGround, moveGround, moveJump, moveAir, groundAnchor, walkVector, bodyClear, airClear } from './ground.js';
 
 const flat = (y = 10) => ({ terrain: { heightAt: () => y } });
 const near = (a, b, eps = 1e-8) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -115,6 +115,29 @@ test('jump follows the same ballistic arc across frame rates and lands exactly',
   near(mid.y, 10 + JUMP.speed * 0.25 - JUMP.gravity * 0.25 ** 2 / 2);
   assert.deepEqual(start, { y: 10, velocity: JUMP.speed, on: true });
   assert.equal(moveJump(flat(), pos, start, 2).on, false);
+});
+
+test('a jump steered off a roof edge falls past the ledge and lands on the ground below', () => {
+  const env = { terrain: { heightAt: () => 2 }, solid: { heightAt: (x) => x < 1 ? 10 : -1e9 } };
+  let pos = { x: 0.9, y: 10, z: 0 };
+  let jump = { y: 10, velocity: JUMP.speed, on: true }, peak = 10;
+  for (let i = 0; i < 600 && jump.on; i++) {
+    if (moveAir(env, pos, 0.05, 0, jump.y)) pos = { x: pos.x + 0.05, y: pos.y, z: pos.z };
+    jump = moveJump(env, pos, jump, 1 / 120);
+    peak = Math.max(peak, jump.y);
+  }
+  assert.ok(pos.x > 1, 'the feet left the roof');
+  assert.ok(peak > 10 + 0.5, 'the jump rose before falling');
+  assert.equal(jump.on, false);
+  near(jump.y, 2);
+});
+
+test('a descending jump stops on a solid roof without sweeping into the roof', () => {
+  const env = { terrain: { heightAt: () => 2 }, solid: {
+    heightAt: () => 10, collide: (p, radius) => p.y < 10 + radius - 1e-5,
+  } };
+  const landed = moveJump(env, { x: 0, y: 10, z: 0 }, { y: 10.01, velocity: -5, on: true }, 1 / 60);
+  assert.deepEqual(landed, { y: 10, velocity: 0, on: false });
 });
 
 test('swept jump stops at a low ceiling and returns to its support', () => {

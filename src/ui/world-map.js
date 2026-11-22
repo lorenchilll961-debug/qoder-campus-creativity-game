@@ -7,6 +7,8 @@ const KINDS = { town: ['○', '城镇'], landing: ['■', '停靠平台'], place
 const COLORS = { player: '#f5faf5', target: '#ffc979', pickup: '#94d7be', destination: '#dfc391', town: '#a9dfd4', landing: '#94d7be', place: '#c5cfaa', pin: '#ffc979' };
 const PIN_LIMIT = 12;
 const signed = n => `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
+const stationHeight = station => `${station.spot || (station.street ? '地面门口' : '屋顶露台')}｜${station.street ? '地面高度' : '平台高度'} ${station.pos.y.toFixed(2)} 米（世界 Y）`;
+const groundArrival = '请到地面标记上方按 G 降落，步行到门口交接，勿前往屋顶。';
 
 // span is metres across the viewport's SHORT axis; north is -z, east is +x.
 export function boundView(view, world, w, h) {
@@ -74,6 +76,12 @@ export class WorldMap {
         <p class="wm-position"></p></section>
         <aside class="wm-sidebar" aria-label="地点与标记">
           <section class="wm-exploration"><div><h3>探索记录</h3><span class="wm-progress-text"></span></div><progress max="100" value="0" aria-label="全岛探索进度"></progress><p class="wm-discoveries"></p></section>
+          <section class="wm-deliveries" aria-label="配送站点与随身订单">
+            <h3>随身订单 <span class="wm-order-count wm-count"></span></h3><p class="wm-orders-empty">暂无随身订单，选择站点前往接单。</p>
+            <div class="wm-orders" role="group" aria-label="全部随身订单，选择收件点"></div>
+            <h3>配送站点 <span class="wm-station-count wm-count"></span></h3><p class="wm-delivery-hint">每站持续接单 · 点击切换导航</p>
+            <div class="wm-stations" role="group" aria-label="全部配送站点，选择取件点"></div>
+          </section>
           <section class="wm-details" aria-label="所选地点"><span class="wm-detail-kind wm-eyebrow">地点详情</span><h3 class="wm-detail-name">选择一处地点</h3>
             <p class="wm-detail-description">点击地图符号或下方地点列表，查看距离与高度。</p><p class="wm-detail-coordinates"></p><p class="wm-detail-warning"></p>
             <div class="wm-detail-actions"><button type="button" data-action="track" disabled>追踪地点</button><button type="button" data-action="focus" disabled>在图中定位</button></div>
@@ -84,7 +92,7 @@ export class WorldMap {
           <p class="wm-pin-status" role="status"></p><div class="wm-places" role="group" aria-label="可选择的已知地点"></div><p class="wm-empty" hidden>此类别暂无已知地点。继续探索，或开启其他类别。</p>
         </aside></div>
       <footer><div class="wm-legend"><span>▲ 玩家</span><span class="wm-target">◎ 当前目标</span><span class="wm-pickup">■ 取件点</span><span class="wm-destination">◆ 收件点</span></div>
-        <p>拖动平移 · 滚轮缩放 · 虚线仅为方向参考，不是地面道路；请避开山体，降落在指定平台。</p></footer>`;
+        <p>拖动平移 · 滚轮缩放 · 虚线仅为方向参考，不是地面道路；屋顶请对准平台，地面请按 G 降落后步行交接。</p></footer>`;
     document.body.appendChild(this.dialog);
     this.canvas = this.dialog.querySelector('canvas');
     this.ctx = this.canvas.getContext('2d');
@@ -102,7 +110,8 @@ export class WorldMap {
       if (button.dataset.filter) {
         const kind = button.dataset.filter;
         this.atlas.setFilter(kind, !this.atlas.filters[kind]); this.render();
-      } else if (button.dataset.id) this.select(button.dataset.kind, button.dataset.id);
+      } else if (button.dataset.stationId) this.selectStation(button.dataset.stationId);
+      else if (button.dataset.id) this.select(button.dataset.kind, button.dataset.id);
       else this.action(button.dataset.action);
     });
     this.dialog.querySelector('.wm-pin-editor').addEventListener('submit', e => { e.preventDefault(); this.savePin(); });
@@ -176,13 +185,26 @@ export class WorldMap {
     return target && (!target.hidden || this.atlas.isKnown(target)) ? target : null;
   }
   routePoints() {
-    const stops = this.courier.quest.status === 'completed' ? [] : [this.courier.pickup, this.courier.destination];
-    return [this.game.flight.pos, this.target()?.pos, ...stops
-      .filter(p => p && (!p.hidden || this.atlas.isKnown(p))).map(p => p.pos)].filter(valid);
+    // The errand stations double as the route's waypoints: every one of them can hand out work.
+    const stops = this.courier.stations || [];
+    return [this.game.flight.pos, this.target()?.pos, ...stops.map(p => p.pos)].filter(valid);
   }
   knownItems() { return [...this.atlas.landmarks.filter(p => this.atlas.isKnown(p)), ...this.atlas.pins]; }
   visibleItems() { return this.knownItems().filter(p => this.atlas.filters[p.kind]); }
-  selected() { return this.visibleItems().find(p => p.id === this.selection?.id && (p.kind === 'pin' ? 'pin' : 'landmark') === this.selection.kind) || null; }
+  selected() {
+    if (this.selection?.kind === 'station') return this.courier.stationById(this.selection.id);
+    return this.visibleItems().find(p => p.id === this.selection?.id && (p.kind === 'pin' ? 'pin' : 'landmark') === this.selection.kind) || null;
+  }
+  destinationCounts() {
+    const counts = new Map();
+    for (const order of this.courier.quest?.orders || []) counts.set(order.to, (counts.get(order.to) || 0) + 1);
+    return counts;
+  }
+  selectStation(id) {
+    if (!this.courier.trackStation(id)) return;
+    this.selection = { kind: 'station', id }; this.draft = null; this.addingPin = false;
+    this.atlas.track('quest'); this.render();
+  }
   select(kind, id) {
     this.selection = { kind, id }; this.draft = null; this.addingPin = false;
     this.render();
@@ -196,7 +218,10 @@ export class WorldMap {
     else if (action === 'theme') { this.atlas.setTheme(this.atlas.theme === 'dark' ? 'light' : 'dark'); this.render(); }
     else if (action === 'quest') { this.atlas.track('quest'); this.render(); }
     else if (action === 'stop') { this.atlas.clearTracking(); this.render(); }
-    else if (action === 'track' && this.selected()) { this.atlas.track(this.selection.kind, this.selection.id); this.render(); }
+    else if (action === 'track' && this.selected()) {
+      if (this.selection.kind === 'station') this.selectStation(this.selection.id);
+      else { this.atlas.track(this.selection.kind, this.selection.id); this.render(); }
+    }
     else if (action === 'focus' && this.selected()) this.setView({ ...this.selected().pos, span: this.world / 8 });
     else if (action === 'add-pin' && this.atlas.pins.length < PIN_LIMIT) {
       this.addingPin = !this.addingPin; this.draft = null; this.editorKey = null; this.render();
@@ -226,7 +251,8 @@ export class WorldMap {
     return { x: (e.clientX - rect.left) * this.w / rect.width, y: (e.clientY - rect.top) * this.h / rect.height };
   }
   hitTest(p) {
-    return this.visibleItems().map(item => ({ item, screen: mapPoint(item.pos, this.view, this.w, this.h) }))
+    return [...(this.courier.stations || []), ...this.visibleItems()].filter(item => valid(item.pos))
+      .map(item => ({ item, screen: mapPoint(item.pos, this.view, this.w, this.h) }))
       .filter(({ screen }) => screen.x >= 0 && screen.x <= this.w && screen.y >= 0 && screen.y <= this.h)
       .map(hit => ({ ...hit, distance: Math.hypot(p.x - hit.screen.x, p.y - hit.screen.y) }))
       .filter(hit => hit.distance <= 16).sort((a, b) => a.distance - b.distance)[0]?.item;
@@ -244,6 +270,7 @@ export class WorldMap {
       return;
     }
     const item = this.hitTest(p);
+    if (item && this.courier.stations?.includes(item)) { this.selectStation(item.id); return; }
     this.selection = item ? { kind: item.kind === 'pin' ? 'pin' : 'landmark', id: item.id } : null;
     this.render();
   }
@@ -251,7 +278,8 @@ export class WorldMap {
     const item = this.hitTest(this.localPoint(e));
     const tooltip = this.dialog.querySelector('.wm-hover');
     tooltip.hidden = !item || this.addingPin;
-    tooltip.textContent = item ? `${KINDS[item.kind][0]} ${item.name}` : '';
+    const station = item && this.courier.stations?.includes(item), count = station ? this.destinationCounts().get(item.id) || 0 : 0;
+    tooltip.textContent = station ? `${count ? `◆ 收件点 · ${count} 单` : '■ 取件点'} · ${item.name} · ${stationHeight(item)}` : item ? `${KINDS[item.kind][0]} ${item.name}` : '';
     this.canvas.classList.toggle('has-hit', !!item);
   }
   clearHover() { this.dialog.querySelector('.wm-hover').hidden = true; this.canvas.classList.remove('has-hit'); }
@@ -397,11 +425,9 @@ export class WorldMap {
       c.beginPath(); c.setLineDash([6, 7]); c.strokeStyle = color; c.lineWidth = 1.5;
       c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); c.setLineDash([]);
     };
-    const { pickup, destination } = this.courier, target = this.target(), player = this.game.flight.pos;
-    const publicStop = p => this.courier.quest.status !== 'completed' && p && (!p.hidden || this.atlas.isKnown(p));
-    if (publicStop(pickup) && publicStop(destination)) line(pickup.pos, destination.pos, '#dfc39180');
+    const target = this.target(), player = this.game.flight.pos;
     line(player, target?.pos, COLORS.target);
-    const marker = (p, kind, text, edge = false, selected = false) => {
+    const marker = (p, kind, text, edge = false, selected = false, count = 0) => {
       if (!valid(p)) return;
       const raw = point(p);
       if (!edge && (raw.x < 0 || raw.x > w || raw.y < 0 || raw.y > h)) return;
@@ -418,18 +444,28 @@ export class WorldMap {
       if (kind === 'target' || kind === 'town' || kind === 'pin') { c.strokeStyle = COLORS[kind]; c.lineWidth = 2; c.stroke(); }
       else c.fill();
       c.restore();
+      if (count) {
+        c.font = 'bold 11px system-ui, sans-serif';
+        const text = String(count), width = c.measureText(text).width, left = clamp(x + 8, 4, w - width - 8), top = clamp(y + 14, 14, h - 4);
+        c.fillStyle = '#172f34'; c.fillRect(left - 3, top - 12, width + 6, 16);
+        c.fillStyle = COLORS.destination; c.fillText(text, left, top);
+      }
       if (text) label(`${text}${off && edge ? '（图外）' : ''}`, x + 14, y - 12, COLORS[kind]);
     };
     // Priority labels go first; filtered/undiscovered landmarks never reach the painter.
     marker(target?.pos, 'target', `目标 · ${target?.name || '停靠点'}`, true);
     marker(player, 'player', '你在这里', true);
+    const counts = this.destinationCounts();
+    for (const station of this.courier.stations || []) {
+      const count = counts.get(station.id) || 0, selected = this.selection?.kind === 'station' && this.selection.id === station.id;
+      marker(station.pos, 'pickup', count ? '' : `取件点 · ${station.name}`, true, selected);
+      if (count) marker(station.pos, 'destination', `收件点 · ${count} 单 · ${station.name}`, true, false, count);
+    }
     for (const item of this.visibleItems()) {
-      const selected = this.selection?.id === item.id;
+      const selected = this.selection?.kind !== 'station' && this.selection?.id === item.id;
       const labelVisible = item.kind !== 'landing' || v.span < this.world / 3 || selected;
       marker(item.pos, item.kind, labelVisible && target?.pos !== item.pos ? item.name : '', false, selected);
     }
-    if (publicStop(pickup) && pickup !== target) marker(pickup.pos, 'pickup', '取件点', true);
-    if (publicStop(destination) && destination !== target) marker(destination.pos, 'destination', '收件点', true);
     if (this.draft) marker(this.draft.pos, 'pin', this.draft.name, false, true);
     const metres = 10 ** Math.floor(Math.log10(90 / scale)), length = metres * scale;
     c.strokeStyle = COLORS.player; c.lineWidth = 2; c.beginPath(); c.moveTo(16, h - 17); c.lineTo(16 + length, h - 17); c.stroke();
@@ -447,9 +483,10 @@ export class WorldMap {
     q('[data-action="theme"]').textContent = atlas.theme === 'dark' ? '浅色航图' : '深色航图';
     q('[data-action="theme"]').setAttribute('aria-pressed', String(atlas.theme === 'light'));
     for (const kind of Object.keys(KINDS)) q(`[data-filter="${kind}"]`).setAttribute('aria-pressed', String(atlas.filters[kind]));
-    const status = { available: '待取件', active: '配送中', completed: '订单已完成' }[this.courier.quest?.status] || '自由航行';
-    const pad = target && (target.pad || target === this.courier.target || atlas.landmarks.some(item => item.pad === target && atlas.isKnown(item)));
-    q('.wm-order').textContent = target ? `${status} · ${target.name} · ${pad ? `${target.spot || '停靠平台'}｜平台高度` : '导航高度'} ${target.pos.y.toFixed(2)} 米（世界 Y）${pad ? '；请对准平台，勿降至下方地面。' : '；仅作方向参考。'}` : `${status} · 暂无当前目标，自由探索全岛。`;
+    const status = this.courier.statusText || '自由航行';
+    const pad = target && !target.street && (target.pad || atlas.landmarks.some(item => item.pad === target && atlas.isKnown(item)));
+    const height = target?.street ? `${target.spot || '地面门口'}｜地面高度` : pad ? `${target.spot || '停靠平台'}｜平台高度` : '导航高度';
+    q('.wm-order').textContent = target ? `${status} · ${target.name} · ${height} ${target.pos.y.toFixed(2)} 米（世界 Y）；${target.street ? groundArrival : pad ? '请对准平台，勿降至下方地面。' : '仅作方向参考。'}` : `${status} · 暂无当前目标，自由探索全岛。`;
     q('[data-action="quest"]').disabled = !this.courier.target || atlas.tracking?.kind === 'quest';
     q('[data-action="stop"]').disabled = !atlas.tracking;
     q('[data-action="route"]').disabled = !target;
@@ -464,16 +501,17 @@ export class WorldMap {
     q('[data-action="add-pin"]').textContent = this.addingPin ? '取消添加' : '＋ 添加标记';
     q('.wm-pin-status').textContent = this.addingPin ? '点击地形选择位置；拖动只平移，不会添加标记。' : full ? '标记 12 / 12 · 已达上限，请先删除一个。' : `标记 ${atlas.pins.length} / 12 · 仅用于导航`;
     this.canvas.classList.toggle('adding-pin', this.addingPin);
-    this.renderDetails(); this.renderList(); this.renderZoom();
+    this.renderDeliveries(); this.renderDetails(); this.renderList(); this.renderZoom();
   }
   renderDetails() {
     const q = selector => this.dialog.querySelector(selector), item = this.draft || this.selected(), player = this.game.flight.pos;
-    q('.wm-detail-kind').textContent = item ? `${KINDS[item.kind][0]} ${KINDS[item.kind][1]}${this.draft ? ' / 新标记' : ''}` : '地点详情';
+    const station = item && !this.draft && this.selection?.kind === 'station', count = station ? this.destinationCounts().get(item.id) || 0 : 0;
+    q('.wm-detail-kind').textContent = station ? `■ 配送站点${count ? ` / ◆ 待送 ${count} 单` : ''}` : item ? `${KINDS[item.kind][0]} ${KINDS[item.kind][1]}${this.draft ? ' / 新标记' : ''}` : '地点详情';
     q('.wm-detail-name').textContent = item?.name || '选择一处地点';
-    q('.wm-detail-description').textContent = item?.description || (item ? '记录位置，规划下一段航行。' : '点击地图符号或下方地点列表，查看距离与高度。');
-    q('.wm-detail-coordinates').textContent = item ? `X ${item.pos.x.toFixed(1)} / Z ${item.pos.z.toFixed(1)}\n${item.pad ? '平台高度' : '位置高度'} ${item.pos.y.toFixed(2)} 米（世界 Y）\n水平距离 ${Math.hypot(item.pos.x - player.x, item.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(item.pos.y - player.y)} 米` : '';
-    q('.wm-detail-warning').textContent = item?.kind === 'pin' ? '自定义标记仅用于导航，不是停靠平台；高度来自此处地形 / 海面。' : item?.pad ? '请对准真实平台高度，勿降至下方地面。' : '';
-    const tracked = item?.id && this.atlas.tracking?.id === item.id && this.atlas.tracking?.kind === this.selection?.kind;
+    q('.wm-detail-description').textContent = station ? `可持续接单${count ? `，携带 ${count} 单送往此处` : ''}。` : item?.description || (item ? '记录位置，规划下一段航行。' : '点击地图符号或下方地点列表，查看距离与高度。');
+    q('.wm-detail-coordinates').textContent = item ? `X ${item.pos.x.toFixed(1)} / Z ${item.pos.z.toFixed(1)}\n${station ? stationHeight(item) : `${item.pad ? '平台高度' : '位置高度'} ${item.pos.y.toFixed(2)} 米（世界 Y）`}\n水平距离 ${Math.hypot(item.pos.x - player.x, item.pos.z - player.z).toFixed(0)} 米 · 高差 ${signed(item.pos.y - player.y)} 米` : '';
+    q('.wm-detail-warning').textContent = station && item.street ? groundArrival : item?.kind === 'pin' ? '自定义标记仅用于导航，不是停靠平台；高度来自此处地形 / 海面。' : station || item?.pad ? '请对准真实平台高度，勿降至下方地面。' : '';
+    const tracked = station ? this.atlas.tracking?.kind === 'quest' && this.courier.target?.id === item.id : item?.id && this.atlas.tracking?.id === item.id && this.atlas.tracking?.kind === this.selection?.kind;
     q('[data-action="track"]').disabled = !item || !!this.draft || !!tracked;
     q('[data-action="track"]').textContent = tracked ? '正在追踪' : '追踪地点';
     q('[data-action="focus"]').disabled = !item || !!this.draft;
@@ -484,6 +522,34 @@ export class WorldMap {
     q('[data-action="save-pin"]').disabled = !!this.draft && this.atlas.pins.length >= PIN_LIMIT;
     const key = item?.kind === 'pin' ? this.draft ? 'draft' : item.id : null;
     if (key !== this.editorKey) { q('#wm-pin-name').value = item?.name || ''; this.editorKey = key; }
+  }
+  renderDeliveries() {
+    const q = selector => this.dialog.querySelector(selector), stations = this.courier.stations || [], orders = this.courier.quest?.orders || [], counts = this.destinationCounts();
+    const orderItems = orders.map(order => {
+      const from = this.courier.stationById(order.from), to = this.courier.stationById(order.to);
+      return { stationId: order.to, disabled: !to, name: `${order.parcel} → ${to?.name || order.to}`,
+        details: `订单 ${order.id} · 来自 ${from?.name || order.from}${from?.spot ? `（${from.spot}）` : ''} · ${order.reward} 风铃币\n${to ? stationHeight(to) : '收件站点不可用'}` };
+    });
+    const stationItems = stations.map(station => ({ stationId: station.id, name: `■ ${station.name}`,
+      details: `${stationHeight(station)}\n可接单${counts.has(station.id) ? ` · ◆ 待送 ${counts.get(station.id)} 单` : ''}` }));
+    const signature = JSON.stringify([orderItems, stationItems]);
+    if (signature !== this.deliverySignature) {
+      this.deliveryRows = [];
+      for (const [selector, items] of [['.wm-orders', orderItems], ['.wm-stations', stationItems]]) {
+        const list = q(selector); list.replaceChildren();
+        for (const item of items) {
+          const button = document.createElement('button'), name = document.createElement('span'), details = document.createElement('small');
+          button.type = 'button'; button.className = 'wm-delivery'; button.dataset.stationId = item.stationId; button.disabled = !!item.disabled;
+          name.textContent = item.name; details.textContent = item.details;
+          button.append(name, details); list.appendChild(button); this.deliveryRows.push(button);
+        }
+      }
+      this.deliverySignature = signature;
+    }
+    for (const row of this.deliveryRows) row.setAttribute('aria-pressed', String(this.atlas.tracking?.kind === 'quest' && row.dataset.stationId === this.courier.target?.id));
+    q('.wm-order-count').textContent = `${orders.length} 单`;
+    q('.wm-station-count').textContent = `${stations.length} 处`;
+    q('.wm-orders-empty').hidden = orders.length !== 0;
   }
   renderList() {
     const list = this.dialog.querySelector('.wm-places'), items = this.visibleItems();
@@ -501,7 +567,7 @@ export class WorldMap {
       this.listSignature = signature;
     }
     for (const row of this.rows) row.setAttribute('aria-pressed', String(row.dataset.id === this.selection?.id && row.dataset.kind === this.selection?.kind));
-    this.dialog.querySelector('.wm-count').textContent = String(items.length);
+    this.dialog.querySelector('.wm-list-heading .wm-count').textContent = String(items.length);
     this.dialog.querySelector('.wm-empty').hidden = items.length !== 0;
   }
 }

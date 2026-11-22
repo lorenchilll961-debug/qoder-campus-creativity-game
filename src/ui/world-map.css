@@ -92,6 +92,14 @@
 .world-map output { display: inline-block; width: 50px; text-align: center; font-variant-numeric: tabular-nums; }
 .world-map .wm-position { color: var(--wm-muted); font-size: 11px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .world-map .wm-sidebar { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; border-left: 1px solid var(--wm-line); padding-left: 22px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--wm-line) transparent; }
+.world-map .wm-sidebar > * { flex-shrink: 0; }
+.world-map .wm-deliveries { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--wm-line); }
+.world-map .wm-orders-empty, .world-map .wm-delivery-hint { font-size: 11px; color: var(--wm-muted); }
+.world-map .wm-orders, .world-map .wm-stations { display: grid; grid-auto-rows: max-content; align-content: start; gap: 5px; max-height: 240px; overflow: auto; overscroll-behavior: contain; padding: 4px; scrollbar-width: thin; }
+.world-map .wm-orders:empty, .world-map .wm-stations:empty { display: none; }
+.world-map .wm-stations { max-height: 180px; }
+.world-map .wm-delivery { display: grid; gap: 3px; width: 100%; min-width: 0; padding: 7px 8px; text-align: left; overflow-wrap: anywhere; }
+.world-map .wm-delivery small { color: var(--wm-muted); font-size: 10px; white-space: pre-line; font-variant-numeric: tabular-nums; }
 .world-map .wm-exploration { padding-bottom: 13px; border-bottom: 1px solid var(--wm-line); }
 .world-map .wm-exploration > div { display: flex; justify-content: space-between; align-items: baseline; }
 .world-map .wm-progress-text { color: var(--wm-teal); font-size: 18px; font-variant-numeric: tabular-nums; }
@@ -146,7 +154,7 @@
 }
 @media (max-width: 760px) {
   .world-map { padding: 12px; }
-  .world-map[open] { grid-template-rows: auto auto auto auto; }
+  .world-map[open] { grid-template-rows: auto auto max-content auto; align-content: start; }
   .world-map .wm-layout { grid-template-columns: 1fr; }
   .world-map .wm-chart { min-height: 410px; }
   .world-map .wm-sidebar { overflow: visible; border-left: 0; border-top: 1px solid var(--wm-line); padding: 12px 0 0; }
