@@ -205,7 +205,7 @@ async function boot() {
   game.chase = new ChaseCamera(camera, flight);
   game.chase.mode = 2;                       // the title screen watches from further back
   game.chase.dist = 14; game.chase.height = 4.2;
-  game.dragon = createIslandDragon(game);
+  game.dragon = createIslandDragon(game, { randomStart: !params.has('dragon') });
   game.gameplay = new Gameplay(game);        // landing pads, deliveries, the kickflip (asleep until game.town exists)
   game.atlas = new AtlasState(game.save, terrain, worldLandmarks(game));
   for (const place of places.list) place.visited = game.atlas.discovered.has(`place:${place.id}`);
@@ -329,7 +329,7 @@ function advance(dt, ctl) {
   flight.update(dt, ctl, t);
   rider.update(dt, t, flight, terrain);
   game.dragon?.update(dt);
-  if (params.has('dragon')) game.dragon?.show(camera);
+  if (params.has('dragon')) game.dragon?.show(camera, params.get('dragon') === '3' ? 2 : 0);
   if (flight.touchdown > 0) fx.slam(flight, flight.touchdown, rider.sunVis);
   // the wake: step the vortex simulation, then let it blow over the ground field
   vortex.update(dt, flight, t, fx.env.wind);

@@ -27,24 +27,29 @@ function grain(kind) {
   return map;
 }
 
-export function createWorkshop(terrain, x, z) {
-  const root = new THREE.Group();
-  root.name = '秋英坡守望工坊';
-  root.position.set(x, terrain.heightAt(x, z) - 0.15, z);
+export function workshopMaterials() {
   const make = (color, map) => new THREE.MeshStandardMaterial({ color, map, roughness: 0.88 });
   const stone = make(0xb5a086, grain('stone')), tile = make(0x496e7c, grain('tile'));
   const timber = make(0x815339, grain('wood')), plaster = make(0xc78e69, stone.map);
   const inner = make(0x4d3732, grain('wood'));
   const foundation = make(0x8c8a78, stone.map);
   const warm = new THREE.MeshStandardMaterial({ color: 0xffbd67, emissive: 0xf18832, emissiveIntensity: 0.7 });
+  return { stone, tile, timber, plaster, inner, foundation, warm };
+}
+
+export function createWorkshop(terrain, x, z, { size = 1, name = '秋英坡守望工坊', materials = workshopMaterials() } = {}) {
+  const root = new THREE.Group();
+  root.name = name;
+  root.position.set(x, terrain.heightAt(x, z) - 0.15, z);
+  const { stone, tile, timber, plaster, inner, foundation, warm } = materials;
   const parts = [], debris = [];
   const euler = new THREE.Euler(), q = new THREE.Quaternion(), aabb = new THREE.Box3();
-  const damagePoint = root.position.clone().add(v(0, 7.3, 0));
+  const damagePoint = root.position.clone().add(v(0, 7.3 * size, 0));
 
   function piece(position, outline, depth, mat, roll = 0, yaw = 0, breakable = true) {
-    const solid = prism(outline, depth / 2);
+    const solid = prism(outline.map(([x, y]) => [x * size, y * size]), depth * size / 2);
     const mesh = meshOf(solid, [mat, inner]);
-    mesh.position.copy(position);
+    mesh.position.copy(position).multiplyScalar(size);
     mesh.rotation.set(0, yaw, roll, 'YXZ');
     mesh.updateMatrix();
     root.add(mesh);
@@ -56,8 +61,8 @@ export function createWorkshop(terrain, x, z) {
     piece(v(x, y, z), rectangular(w, h), d, mat, roll, yaw, breakable);
   box(0, -0.14, 0, 17, 3.8, 13.5, foundation, 0, 0, false);
   box(0, 1.78, 0, 16.5, 0.28, 12.8, stone, 0, 0, false);
-  const baseTop = root.position.y + 1.92;
-  const baseBounds = new THREE.Box3(v(x-8.5, root.position.y-2.04, z-6.75), v(x+8.5, baseTop, z+6.75));
+  const baseTop = root.position.y + 1.92 * size;
+  const baseBounds = new THREE.Box3(v(x-8.5*size, root.position.y-2.04*size, z-6.75*size), v(x+8.5*size, baseTop, z+6.75*size));
 
   for (const sign of [-1, 1]) {
     for (const side of [-1, 1]) {
@@ -83,8 +88,8 @@ export function createWorkshop(terrain, x, z) {
   const scorchMaterial = new THREE.MeshBasicMaterial({
     color: 0x2c171a, transparent: true, opacity: 0, polygonOffset: true, polygonOffsetFactor: -1, depthWrite: false,
   });
-  const scorch = new THREE.Mesh(new THREE.CircleGeometry(5.8, 22), scorchMaterial);
-  scorch.position.set(0.25, 1.935, 0.45);
+  const scorch = new THREE.Mesh(new THREE.CircleGeometry(5.8 * size, 22), scorchMaterial);
+  scorch.position.set(0.25, 1.935, 0.45).multiplyScalar(size);
   scorch.rotation.x = -Math.PI / 2;
   root.add(scorch);
 
@@ -112,7 +117,7 @@ export function createWorkshop(terrain, x, z) {
         shard.quaternion.copy(mesh.quaternion);
         root.add(shard);
         const home = shard.position.clone(), orientation = shard.quaternion.clone();
-        const outward = home.clone().sub(v(0, 7, 0)).normalize();
+        const outward = home.clone().sub(v(0, 7 * size, 0)).normalize();
         const velocity = direction.clone().multiplyScalar(3.1 + Math.random()*2.2).addScaledVector(outward, 0.9 + Math.random()*3);
         velocity.y += 3.7 + Math.random()*6;
         debris.push({ shard, home, orientation, velocity, spin: v(Math.random()*3-1.5, Math.random()*2-1, Math.random()*3-1.5), settled: false });
@@ -140,7 +145,7 @@ export function createWorkshop(terrain, x, z) {
         velocity.y -= 13.5 * dt;
         p.addScaledVector(velocity, dt);
         const floor = Math.max(terrain.heightAt(p.x+x, p.z+z)-root.position.y,
-          Math.abs(p.x) <= 8.5 && Math.abs(p.z) <= 6.75 ? 1.92 : -Infinity);
+          Math.abs(p.x) <= 8.5 * size && Math.abs(p.z) <= 6.75 * size ? 1.92 * size : -Infinity);
         q.setFromEuler(euler.set(spin.x*dt, spin.y*dt, spin.z*dt));
         shard.quaternion.multiply(q).normalize();
         shard.updateMatrix();
@@ -163,6 +168,7 @@ export function createWorkshop(terrain, x, z) {
 
   const collision = {
     heightAt(px, pz) {
+      if (!near(px, pz)) return -Infinity;
       let height = -Infinity;
       for (const b of boxes()) {
         if (px >= b.min.x && px <= b.max.x && pz >= b.min.z && pz <= b.max.z) height = Math.max(height, b.max.y);
@@ -173,6 +179,7 @@ export function createWorkshop(terrain, x, z) {
       return px >= baseBounds.min.x && px <= baseBounds.max.x && pz >= baseBounds.min.z && pz <= baseBounds.max.z ? baseTop : -Infinity;
     },
     collide(pos, radius, normal) {
+      if (!near(pos.x, pos.z, radius)) return false;
       for (const b of boxes()) {
         const nearest = b.clampPoint(pos, v(0,0,0));
         if (nearest.distanceToSquared(pos) >= radius * radius) continue;
@@ -183,6 +190,7 @@ export function createWorkshop(terrain, x, z) {
       return false;
     },
   };
+  const near = (px, pz, margin = 0) => Math.abs(px - x) <= 9 * size + margin && Math.abs(pz - z) <= 7 * size + margin;
   function* boxes() {
     yield baseBounds;
     for (const { bounds, mesh } of parts) if (mesh.visible) yield bounds;

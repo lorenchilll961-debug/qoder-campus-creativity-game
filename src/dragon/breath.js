@@ -39,7 +39,7 @@ const fragment = /* glsl */`
   }
 `;
 
-export function createBreath(world, viewport, field) {
+export function createBreath(world, viewport) {
   const count = 680;
   const particles = Array.from({ length: count }, () => ({ position: v(), velocity: v(), age: 0, life: 0 }));
   const geometry = new THREE.BufferGeometry();
@@ -58,19 +58,20 @@ export function createBreath(world, viewport, field) {
 
   const muzzleLight = new THREE.PointLight(0xff6532, 0, 36);
   const hitLight = new THREE.PointLight(0xff752d, 0, 31);
-  const impact = field.damagePoint;
+  const impact = v();
   world.add(muzzleLight, hitLight);
-  hitLight.position.copy(impact).y -= 1.6;
   let next = 0, emission = 0, smolder = 0, hit = 0;
   const old = v(), delta = v(), nearest = v();
-  function emit(origin, velocity, kind, size, life, attack = false) {
+  function emit(origin, velocity, kind, size, life, target = null) {
     const p = particles[next++ % count];
     p.position.copy(origin); p.velocity.copy(velocity);
     p.kind = kind; p.size = size; p.life = life; p.age = 0;
     p.phase = Math.random() * 6.28;
-    p.attack = attack;
+    p.target = target;
   }
-  function burst() {
+  function burst(point) {
+    impact.copy(point);
+    hitLight.position.copy(impact).y -= 1.6;
     hit = 1;
     smolder = 6.8;
     for (let i = 0; i < 82; i++) {
@@ -80,19 +81,19 @@ export function createBreath(world, viewport, field) {
       emit(impact.clone().add(offset), velocity, kind, kind ? 0.31 : 3.3, kind ? 0.7+Math.random() : 2.4+Math.random()*1.6);
     }
   }
-  function update(dt, mouth, axis, firing, wind) {
+  function update(dt, mouth, axis, target, wind) {
     cloud.material.uniforms.uScale.value = viewport.y * 0.54;
     muzzleLight.position.copy(mouth).addScaledVector(axis, 2);
-    muzzleLight.intensity = firing ? 160 + Math.random()*80 : 0;
+    muzzleLight.intensity = target ? 160 + Math.random()*80 : 0;
     hit = Math.max(0, hit - dt * 0.66);
     hitLight.intensity = hit * (470 + Math.random()*150);
-    emission += firing ? dt * 188 : 0;
+    emission += target ? dt * 188 : 0;
     while (emission >= 1) {
       emission--;
       const velocity = axis.clone().multiplyScalar(43 + Math.random()*16);
       velocity.add(v().set((Math.random()-0.5)*7, (Math.random()-0.5)*6, (Math.random()-0.5)*7));
       const kind = next % 7 ? 1 : 2;
-      emit(mouth, velocity, kind, kind === 1 ? 0.9+Math.random()*0.70 : 0.19, 0.57+Math.random()*0.33, true);
+      emit(mouth, velocity, kind, kind === 1 ? 0.9+Math.random()*0.70 : 0.19, 0.57+Math.random()*0.33, target);
       if (next % 6 === 0) emit(mouth, velocity.multiplyScalar(0.57), 0, 1.15, 1.65);
     }
     smolder = Math.max(0, smolder - dt);
@@ -107,14 +108,16 @@ export function createBreath(world, viewport, field) {
       p.age += dt;
       old.copy(p.position);
       p.position.addScaledVector(p.velocity, dt);
-      if (p.attack && field.intact) {
+      const field = p.target;
+      if (field?.intact) {
+        const point = field.damagePoint;
         delta.subVectors(p.position, old);
-        const at = THREE.MathUtils.clamp(nearest.subVectors(impact, old).dot(delta) / Math.max(1e-8, delta.lengthSq()), 0, 1);
+        const at = THREE.MathUtils.clamp(nearest.subVectors(point, old).dot(delta) / Math.max(1e-8, delta.lengthSq()), 0, 1);
         nearest.copy(old).addScaledVector(delta, at);
-        if (nearest.distanceToSquared(impact) < 3.8 ** 2 && field.destroy(nearest, p.velocity.clone().normalize())) burst();
+        if (nearest.distanceToSquared(point) < 3.8 ** 2 && field.destroy(nearest, p.velocity.clone().normalize())) burst(point);
       }
       p.velocity.y += dt * (p.kind === 2 ? -7.4 : p.kind ? 2.5 : 1.15);
-      if (!p.attack) p.velocity.addScaledVector(wind, p.kind ? dt * 0.15 : dt * 0.12);
+      if (!field) p.velocity.addScaledVector(wind, p.kind ? dt * 0.15 : dt * 0.12);
       const age = p.age / p.life;
       const size = p.size * (p.kind === 2 ? 1 - age * 0.25 : 0.62 + age * (p.kind === 1 ? 3 : 4.7));
       positions.setXYZ(n, p.position.x, p.position.y, p.position.z);
