@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="./src/ui/journal.css">
 <link rel="stylesheet" href="./src/ui/delivery.css">
 <link rel="stylesheet" href="./src/ui/world-map.css">
+<link rel="stylesheet" href="./src/ui/solar-card-book.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three/build/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
 </script>
@@ -42,6 +43,10 @@
       <div class="job-wallet">风铃币 <span id="jobCoins">0</span> · 首单报酬 30</div>
       <button type="button" class="delivery-map-button" id="openWorldMap">M 世界地图</button>
     </section>
+  </div>
+  <div class="solar-card-dock" aria-label="节气卡牌">
+    <button type="button" id="openSolarDraw" aria-label="抽取节气卡牌" title="抽取节气卡牌" disabled><span aria-hidden="true">✦</span><b id="solarDrawCount">0</b></button>
+    <button type="button" id="openSolarBook" aria-label="打开节气卡册" title="打开节气卡册"><span aria-hidden="true">▤</span><b id="solarBookCount">0 / 24</b></button>
   </div>
   <div class="hud-panel season-dock">
     <section class="season-panel" id="seasonPanel" tabindex="0" aria-label="世界环境：时间、天气与节气，可滚动查看详情">

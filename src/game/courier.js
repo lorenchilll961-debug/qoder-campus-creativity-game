@@ -149,7 +149,8 @@ export class Courier {
     g.fx.burst(pos.x, pos.y + 1.4, pos.z, 46, 0.86, 0.3 + 0.7 * g.rider.sunVis, 4.5);
     this._show();
     const coins = settled.reduce((sum, o) => sum + o.reward, 0);
-    this.hud.card(settled.length > 1 ? `交付 ${settled.length} 单` : '订单完成', `获得 ${coins} 枚风铃币`, '去任意站点再接新单 · 可同时携带多单', 5);
+    this.game.solarCards?.addDraws(settled.length);
+    this.hud.card(settled.length > 1 ? `交付 ${settled.length} 单` : '订单完成', `获得 ${coins} 枚风铃币`, `获得 ${settled.length} 次节气抽卡机会 · 去任意站点再接新单`, 5);
     return true;
   }
 

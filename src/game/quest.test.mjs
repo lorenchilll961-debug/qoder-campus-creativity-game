@@ -290,7 +290,7 @@ function courierFixture(s = store()) {
   const teahouse = { id: ORDER.destination, name: '露台茶馆', pos: { x: 90, y: 10, z: 0 }, pad: { id: 'p2', name: '露台', pos: { x: 90, y: 10, z: 0 } } };
   const game = { state: 'play', paused: false, gameplay: { landing: { ...landing, busy: true, walk: { pos: { x: 0, y: 10, z: 0 } } } },
     flight: { pos: { ...flight.pos }, yaw: 0, gust: 0 }, rider: { sunVis: 1 },
-    toast: (s) => messages.push(s), fx: { sprites: { spawn() {} }, burst() {} } };
+    toast: (s) => messages.push(s), fx: { sprites: { spawn() {} }, burst() {} }, solarCards: { addDraws: (n) => messages.push(`draws:${n}`) } };
   const courier = new Courier(game, s, hud);
   courier.npcs = { stations: [guild, teahouse], update() {},
     inReach: (p) => atCounter(game.gameplay.landing, game.flight, p),
@@ -315,7 +315,9 @@ test('配送集成：接单后目标改变，落地回调不加币，飞抵顾�
   c.arrive(teahouse.pad); assert.equal(c.quest.coins, 0); assert.match(messages.at(-1), /E/);
   assert.equal(c.deliver(teahouse), true); assert.equal(c.target, null);
   assert.equal(c.count, 1); assert.equal(c.quest.coins, ORDER.reward); assert.equal(g.flight.gust, 1);
+  assert.equal(messages.filter((message) => message === 'draws:1').length, 1);
   assert.equal(c.deliver(teahouse), false); assert.equal(c.count, 1);
+  assert.equal(messages.filter((message) => message === 'draws:1').length, 1);
 });
 
 test('配送集成：旧配送数由 Courier 单独相加，迁移首单只结算一次', () => {

@@ -1,0 +1,60 @@
+.solar-card-dock { position: absolute; right: max(28px, env(safe-area-inset-right)); top: 50%; display: grid; gap: 10px; transform: translateY(-50%); pointer-events: none; }
+.solar-card-dock button { position: relative; display: grid; place-items: center; width: 54px; height: 54px; padding: 0; border: 1px solid #eadcad88; border-radius: 10px; color: #fff3d2; background: #17352ee8; box-shadow: 0 8px 22px #0005; cursor: pointer; pointer-events: auto; font: inherit; }
+.solar-card-dock button span { font-size: 25px; line-height: 1; }
+.solar-card-dock button b { position: absolute; right: -7px; bottom: -7px; min-width: 25px; padding: 3px 5px; border: 1px solid #e8d39a; border-radius: 99px; color: #26372f; background: #f4d48e; font: 600 10px system-ui, sans-serif; text-shadow: none; }
+.solar-card-dock button:disabled { opacity: .45; cursor: not-allowed; }
+.solar-card-dock button:not(:disabled):hover, .solar-card-dock button:focus-visible { border-color: #ffe5a1; outline: 2px solid #ffe5a155; outline-offset: 3px; }
+.solar-draw-dialog, .solar-book-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 28px; border: 1px solid #d8bd79; border-radius: 16px; color: #fff8ec; background: #19352f; box-shadow: 0 24px 80px #0008; font-family: inherit; }
+.solar-draw-dialog::backdrop, .solar-book-dialog::backdrop { background: #081817aa; }
+.solar-dialog-header { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
+.solar-dialog-header h2 { margin: 7px 0 0; font-size: 27px; font-weight: 500; }
+.solar-dialog-header button { width: 34px; height: 34px; border: 1px solid #bba66d; border-radius: 50%; color: inherit; background: transparent; font-size: 24px; cursor: pointer; }
+.solar-eyebrow { margin: 0; color: #dcc68b; font-size: 12px; letter-spacing: .16em; }
+.solar-draw-copy, .solar-book-progress { color: #f4dca7; line-height: 1.7; }
+.solar-draw-stage { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 18px; margin: 25px 0; perspective: 900px; }
+.solar-card { min-width: 0; aspect-ratio: 2 / 3; border-radius: 12px; }
+.solar-card-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .7s ease; }
+.solar-card-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; border: 1px solid #eadcad; border-radius: 12px; backface-visibility: hidden; text-align: center; }
+.solar-card-back { color: #f7d895; background: repeating-linear-gradient(135deg, #295247 0 8px, #1d4039 8px 16px); box-shadow: inset 0 0 0 5px #29594d, inset 0 0 0 7px #e0bd6d55; }
+.solar-card-back b { font-size: 42px; font-weight: 400; }
+.solar-card-back span { font-size: 20px; }
+.solar-card-back small { letter-spacing: .16em; }
+.solar-card-front { overflow: hidden; transform: rotateY(180deg); color: #fff8e8; background: #26372f; box-shadow: inset 0 0 0 5px #fff0bd88; text-shadow: 0 1px 4px #251b16; }
+.solar-card-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.solar-card-front::after { position: absolute; inset: 30% 0 0; content: ""; background: linear-gradient(180deg, transparent, #1b211cdd); }
+.solar-card-front > :not(.solar-card-art) { z-index: 1; }
+.solar-card-front strong { margin-top: auto; font-size: 34px; font-weight: 600; }
+.solar-card-front em { min-height: 2.8em; font-size: 13px; font-style: normal; }
+.solar-card-front small { line-height: 1.6; }
+.solar-card-front .solar-card-season { margin-bottom: auto; align-self: flex-start; padding: 5px 8px; border-radius: 4px; background: #14221d99; font: 11px system-ui, sans-serif; }
+.solar-draw-stage.is-revealed .solar-card-inner { transform: rotateY(180deg); }
+.solar-draw-stage .is-selected .solar-card-front { border-color: #fff3af; box-shadow: 0 0 0 4px #f4d48e66, 0 0 28px #f4d48e66, inset 0 0 0 5px #fff0bd88; }
+.solar-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.solar-dialog-actions button { min-height: 42px; padding: 9px 22px; border: 1px solid #bba66d; border-radius: 8px; color: #26372f; background: #e7d5a3; font: inherit; cursor: pointer; }
+.solar-dialog-actions button + button { color: #fff8ec; background: #28473d; }
+.solar-book-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.solar-book-entry { position: relative; min-width: 0; min-height: 150px; padding: 13px; overflow: hidden; border: 1px solid #bba66d55; border-radius: 8px; color: #a9b7ad; background: #102a25; }
+.solar-book-entry.is-owned { color: #fff3d2; border-color: #d8bd79aa; background: linear-gradient(145deg, #395e4d, #1e4038); }
+.solar-book-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .3; }
+.solar-book-entry.is-owned > :not(.solar-book-art) { position: relative; text-shadow: 0 1px 4px #101712; }
+.solar-book-symbol { float: right; color: #d8bd79; font-size: 24px; }
+.solar-book-entry strong { display: block; font-size: 18px; font-weight: 500; }
+.solar-book-entry small { display: block; margin-top: 5px; color: #d6c18b; font-size: 11px; }
+.solar-book-entry p { margin: 12px 0 0; font-size: 12px; line-height: 1.55; }
+@media (max-width: 900px), (max-height: 650px) {
+  .solar-card-dock { right: 14px; }
+  .solar-card-dock button { width: 46px; height: 46px; }
+  .solar-card-dock button span { font-size: 21px; }
+  .solar-draw-dialog, .solar-book-dialog { padding: 18px; }
+  .solar-book-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .solar-card-dock { top: auto; right: 14px; bottom: 92px; transform: none; }
+  .solar-draw-stage { gap: 7px; }
+  .solar-card-face { padding: 7px; gap: 6px; }
+  .solar-card-back span { font-size: 13px; }
+  .solar-card-back b { font-size: 28px; }
+  .solar-card-front strong { font-size: 23px; }
+  .solar-card-front em, .solar-card-front small { font-size: 10px; }
+  .solar-book-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

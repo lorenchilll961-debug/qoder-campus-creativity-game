@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>花信风 · 二十四节气卡牌核对</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #172b26; color: #fff4d6; }
+    body { max-width: 1320px; margin: 0 auto; padding: 28px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { color: #d9c99d; }
+    main { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+    figure { margin: 0; overflow: hidden; border: 1px solid #b99e61; border-radius: 8px; background: #24453b; }
+    img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
+    figcaption { padding: 10px; font-weight: 600; }
+    @media (max-width: 900px) { main { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { body { padding: 16px; } main { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+  </style>
+</head>
+<body>
+  <h1>二十四节气卡牌核对</h1>
+  <p>请逐张确认图片内容是否与下方节气名称对应。图片顺序与游戏卡牌正面一致。</p>
+  <main>
+    <script>
+      const terms = ['立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至','小寒','大寒'];
+      document.querySelector('main').innerHTML = terms.map((name, index) => `<figure><img src="assets/solar-cards/${String(index + 1).padStart(2, '0')}.png" alt="${name}卡牌图片"><figcaption>${String(index + 1).padStart(2, '0')} · ${name}</figcaption></figure>`).join('');
+    </script>
+  </main>
+</body>
+</html>
