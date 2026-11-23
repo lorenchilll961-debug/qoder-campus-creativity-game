@@ -13,6 +13,7 @@ import { Courier } from './courier.js';
 import { Kickflip } from './tricks.js';
 import { Hud } from './hud.js';
 import { WorldMap } from '../ui/world-map.js';
+import { SolarCardBook } from '../ui/solar-card-book.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -56,6 +57,7 @@ export class Gameplay {
     await this.courier.attachUi();
     this.map = new WorldMap(this.game, this.courier);
     document.getElementById('openWorldMap').addEventListener('click', () => this.map.open());
+    this.game.solarCards = new SolarCardBook(this.game, this.game.save);
   }
 
   /** game.town has changed: its buildings become solid, its pads come alive. */
